@@ -10,7 +10,7 @@
   }
 
   body {
-    @apply bg-base-100 text-base-content m-0;
+    @apply bg-surface-50 text-ink-900 m-0;
     min-height: 100vh;
     min-height: 100dvh;
   }
@@ -18,5 +18,34 @@
   #root {
     min-height: 100vh;
     min-height: 100dvh;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-500 text-white rounded-btn px-5 py-2.5 font-medium
+      hover:bg-brand-600 active:bg-brand-700
+      transition-colors duration-150;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-100 text-ink-700 rounded-btn px-5 py-2.5 font-medium
+      hover:bg-surface-200 active:bg-surface-300
+      transition-colors duration-150;
+  }
+
+  .btn-ghost {
+    @apply text-ink-500 rounded-btn px-4 py-2 font-medium
+      hover:bg-surface-100 hover:text-ink-700
+      transition-colors duration-150;
+  }
+
+  .card {
+    @apply bg-white rounded-card shadow-card border border-surface-100 p-5;
+  }
+
+  .card-hover {
+    @apply card hover:shadow-elevated hover:border-brand-200
+      transition-all duration-200 cursor-pointer;
   }
 }

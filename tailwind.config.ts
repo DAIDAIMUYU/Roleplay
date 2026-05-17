@@ -5,18 +5,49 @@ export default {
   theme: {
     extend: {
       colors: {
-        base: {
-          100: "oklch(0.145 0.005 285)",
-          200: "oklch(0.185 0.005 285)",
-          300: "oklch(0.225 0.005 285)",
-          content: "oklch(0.92 0.005 285)",
+        surface: {
+          0: "#ffffff",
+          50: "#f8f7fc",
+          100: "#f0eef8",
+          200: "#e4e0f3",
+          300: "#cdc6e8",
         },
-        accent: {
-          DEFAULT: "oklch(0.70 0.15 25)",
-          content: "oklch(0.98 0.01 25)",
+        brand: {
+          50: "#eef1ff",
+          100: "#dbe2ff",
+          200: "#c0caff",
+          300: "#96a4ff",
+          400: "#6c72f8",
+          500: "#5c4fe0",
+          600: "#4f3ac4",
+          700: "#42309e",
+          800: "#382b80",
+          900: "#312868",
         },
-        muted: "oklch(0.55 0.01 285)",
-        border: "oklch(0.28 0.01 285)",
+        ink: {
+          900: "#171528",
+          700: "#2d2a3f",
+          500: "#5c5970",
+          300: "#9c99ab",
+          200: "#c5c2cf",
+          100: "#e6e4eb",
+        },
+        amber: {
+          light: "#fef3c7",
+          DEFAULT: "#f59e0b",
+        },
+        rose: {
+          light: "#ffe4e6",
+          DEFAULT: "#e11d48",
+        },
+        emerald: {
+          light: "#d1fae5",
+          DEFAULT: "#10b981",
+        },
+        sky: {
+          light: "#e0f2fe",
+          DEFAULT: "#0ea5e9",
+        },
       },
       fontFamily: {
         sans: [
@@ -29,10 +60,10 @@ export default {
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
       borderRadius: {
-        app: "0.75rem",
-        card: "0.5rem",
-        btn: "0.5rem",
-        input: "0.5rem",
+        app: "1rem",
+        card: "0.75rem",
+        btn: "2rem",
+        input: "0.625rem",
         avatar: "9999px",
       },
       spacing: {
@@ -40,6 +71,13 @@ export default {
         "safe-bottom": "env(safe-area-inset-bottom, 0px)",
         "safe-left": "env(safe-area-inset-left, 0px)",
         "safe-right": "env(safe-area-inset-right, 0px)",
+      },
+      boxShadow: {
+        card: "0 1px 3px rgba(23, 21, 40, 0.06), 0 1px 2px rgba(23, 21, 40, 0.04)",
+        elevated:
+          "0 4px 12px rgba(23, 21, 40, 0.08), 0 2px 4px rgba(23, 21, 40, 0.04)",
+        modal:
+          "0 20px 40px rgba(23, 21, 40, 0.15), 0 8px 16px rgba(23, 21, 40, 0.08)",
       },
     },
   },
