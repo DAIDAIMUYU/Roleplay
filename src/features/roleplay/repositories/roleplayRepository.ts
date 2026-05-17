@@ -40,32 +40,82 @@ export async function getCurrentProfile(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<ProfileRow | null> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  return data as ProfileRow | null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) {
+      console.warn("[Repo] getCurrentProfile error:", error.message);
+      return null;
+    }
+    return data as ProfileRow | null;
+  } catch (err) {
+    console.warn("[Repo] getCurrentProfile exception:", err);
+    return null;
+  }
 }
 
 export async function ensureProfile(
   supabase: SupabaseClient,
   userId: string,
   overrides?: Partial<Pick<ProfileRow, "handle" | "display_name">>,
-): Promise<ProfileRow> {
-  const existing = await getCurrentProfile(supabase, userId);
-  if (existing) return existing;
+): Promise<ProfileRow | null> {
+  try {
+    const existing = await getCurrentProfile(supabase, userId);
+    if (existing) return existing;
 
-  const { data } = await supabase
-    .from("profiles")
-    .insert({
-      id: userId,
-      display_name: overrides?.display_name ?? null,
-      handle: overrides?.handle ?? null,
-    })
-    .select()
-    .single();
-  return data as ProfileRow;
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert({
+        id: userId,
+        display_name: overrides?.display_name ?? null,
+        handle: overrides?.handle ?? null,
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[Repo] ensureProfile insert error:", error.message);
+      return null;
+    }
+    return data as ProfileRow | null;
+  } catch (err) {
+    console.warn("[Repo] ensureProfile exception:", err);
+    return null;
+  }
+}
+
+export async function ensureUserRole(
+  supabase: SupabaseClient,
+  userId: string,
+  role: string = "user",
+): Promise<boolean> {
+  try {
+    // Check if user already has this role
+    const { data: existing } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role", role)
+      .maybeSingle();
+
+    if (existing) return true;
+
+    const { error } = await supabase
+      .from("user_roles")
+      .insert({ user_id: userId, role });
+
+    if (error) {
+      console.warn("[Repo] ensureUserRole insert error:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("[Repo] ensureUserRole exception:", err);
+    return false;
+  }
 }
 
 export async function updateProfile(
@@ -73,13 +123,18 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Pick<ProfileRow, "handle" | "display_name" | "avatar_path">>,
 ): Promise<ProfileRow | null> {
-  const { data } = await supabase
-    .from("profiles")
-    .update(updates)
-    .eq("id", userId)
-    .select()
-    .single();
-  return data as ProfileRow | null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("id", userId)
+      .select()
+      .maybeSingle();
+    if (error) return null;
+    return data as ProfileRow | null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- characters ----------
@@ -242,6 +297,40 @@ export async function deleteSession(
     .eq("user_id", userId);
 }
 
+// ---------- session participants ----------
+
+export async function listSessionParticipants(
+  supabase: SupabaseClient,
+  sessionId: string,
+): Promise<import("../types/database").SessionParticipantRow[]> {
+  const { data } = await supabase
+    .from("session_participants")
+    .select("*")
+    .eq("session_id", sessionId);
+  return (data as import("../types/database").SessionParticipantRow[]) ?? [];
+}
+
+export async function ensureSessionParticipant(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  characterId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("session_participants")
+    .upsert(
+      {
+        session_id: sessionId,
+        user_id: userId,
+        character_id: characterId,
+        participant_type: "character",
+        is_active: true,
+      },
+      { onConflict: "session_id,character_id" },
+    );
+  if (error) console.warn("[Repo] ensureSessionParticipant error:", error.message);
+}
+
 // ---------- messages ----------
 
 export async function listMessages(
@@ -328,6 +417,23 @@ export async function listPromptTemplates(
   }
   const { data } = await query.order("updated_at", { ascending: false });
   return (data as PromptTemplateRow[]) ?? [];
+}
+
+export async function getPromptTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+): Promise<PromptTemplateRow | null> {
+  try {
+    const { data, error } = await supabase
+      .from("prompt_templates")
+      .select("*")
+      .eq("id", templateId)
+      .maybeSingle();
+    if (error) return null;
+    return data as PromptTemplateRow | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function createPromptTemplate(

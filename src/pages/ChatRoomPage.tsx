@@ -1,12 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Drama,
-  MessageCircle,
-  AlertTriangle,
-  ChevronDown,
-  WifiOff,
-  RefreshCw,
-  Settings,
+  Drama, MessageCircle, AlertTriangle, ChevronDown, WifiOff, RefreshCw, Settings, X, UserCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth";
@@ -18,28 +12,23 @@ import { MessageBubble } from "../features/roleplay/components/chat/MessageBubbl
 import { ChatInput } from "../features/roleplay/components/chat/ChatInput";
 import { SessionList } from "../features/roleplay/components/chat/SessionList";
 import { ContextPanel } from "../features/roleplay/components/chat/ContextPanel";
+import { supabase } from "../features/auth/supabaseClient";
+import * as Repo from "../features/roleplay/repositories/roleplayRepository";
+import type { CharacterRow, PromptTemplateRow } from "../features/roleplay/types/database";
 import type { ProviderType, ApiKeyStorageMode } from "../features/roleplay/providers";
 import { loadApiKey } from "../features/roleplay/storage/apiKeyStorage";
 
-// Detect what provider/keys the user has configured
 function detectProviderConfig(): {
-  provider: ProviderType;
-  model: string;
-  storageMode: ApiKeyStorageMode;
+  provider: ProviderType; model: string; storageMode: ApiKeyStorageMode;
 } {
-  // Check local device first, then session
   const local = loadApiKey("deepseek", "local_device");
   if (local) return { provider: "deepseek", model: local.model, storageMode: "local_device" };
-
   const session = loadApiKey("deepseek", "session_only");
   if (session) return { provider: "deepseek", model: session.model, storageMode: "session_only" };
-
   const oaiLocal = loadApiKey("openai_compatible", "local_device");
   if (oaiLocal) return { provider: "openai_compatible", model: oaiLocal.model, storageMode: "local_device" };
-
   const oaiSession = loadApiKey("openai_compatible", "session_only");
   if (oaiSession) return { provider: "openai_compatible", model: oaiSession.model, storageMode: "session_only" };
-
   return { provider: "deepseek", model: "deepseek-chat", storageMode: "session_only" };
 }
 
@@ -57,33 +46,53 @@ export function ChatRoomPage() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
 
+  // Session creation picker: character + template
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerChars, setPickerChars] = useState<CharacterRow[]>([]);
+  const [pickerTemplates, setPickerTemplates] = useState<PromptTemplateRow[]>([]);
+  const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
+  const [selectedTplId, setSelectedTplId] = useState<string | null>(null);
+
+  const loadPickerData = useCallback(async () => {
+    if (!supabase || !userId) return;
+    const [chars, tpls] = await Promise.all([
+      Repo.listCharacters(supabase, userId),
+      Repo.listPromptTemplates(supabase, userId),
+    ]);
+    setPickerChars(chars.filter((c) => !c.archived_at));
+    setPickerTemplates(tpls);
+  }, [userId]);
+
+  function handleCreateSession() {
+    if (isGuestOrDemo || !supabase) { chat.createSession(); return; }
+    setSelectedCharId(null);
+    setSelectedTplId(null);
+    loadPickerData();
+    setShowPicker(true);
+  }
+
+  function confirmCreateSession() {
+    setShowPicker(false);
+    chat.createSession(selectedCharId ?? undefined, selectedTplId ?? undefined);
+  }
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat.messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat.messages]);
 
-  // Show "new messages" indicator if user scrolled up
   const [userScrolledUp, setUserScrolledUp] = useState(false);
   const container = messagesContainerRef.current;
-
   useEffect(() => {
     if (!container) return;
     const handler = () => {
-      const atBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-      setUserScrolledUp(!atBottom);
+      setUserScrolledUp(container.scrollHeight - container.scrollTop - container.clientHeight >= 80);
     };
     container.addEventListener("scroll", handler, { passive: true });
     return () => container.removeEventListener("scroll", handler);
   }, [container]);
 
-  function scrollToBottom() {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    setUserScrolledUp(false);
-  }
+  function scrollToBottom() { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); setUserScrolledUp(false); }
 
   function handleSend() {
     if (!inputValue.trim() || chat.isStreaming) return;
@@ -135,7 +144,7 @@ export function ChatRoomPage() {
                 setShowMobileSessions(false);
               }}
               onCreate={() => {
-                chat.createSession();
+                handleCreateSession();
                 setShowMobileSessions(false);
               }}
               onDelete={chat.deleteSession}
@@ -154,15 +163,16 @@ export function ChatRoomPage() {
               </button>
             </div>
             <ContextPanel
-              sessionTitle={
-                chat.sessions.find((s) => s.id === chat.activeSessionId)?.title || ""
-              }
+              sessionTitle={chat.sessions.find((s) => s.id === chat.activeSessionId)?.title || ""}
               messageCount={chat.messageCount}
               isDemo={chat.isDemo}
               providerLabel={chat.providerLabel}
               modelLabel={chat.modelLabel}
               apiConfigured={chat.apiConfigured}
               runtimeMode={chat.runtimeMode}
+              activeCharacter={chat.activeCharacter}
+              activeTemplate={chat.activeTemplate}
+              systemPrompt={chat.systemPrompt}
             />
           </div>
         )}
@@ -315,7 +325,7 @@ export function ChatRoomPage() {
           sessions={chat.sessions}
           activeSessionId={chat.activeSessionId}
           onSelect={chat.selectSession}
-          onCreate={chat.createSession}
+          onCreate={handleCreateSession}
           onDelete={chat.deleteSession}
           loading={false}
         />
@@ -325,22 +335,21 @@ export function ChatRoomPage() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         <div className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-surface-100">
-          <Drama className="h-5 w-5 text-brand-500" />
-          <div className="flex-1">
+          <div className="h-7 w-7 rounded-lg bg-brand-50 text-brand-500 flex items-center justify-center text-sm flex-shrink-0">
+            {chat.activeCharacter?.avatar_emoji || <Drama className="h-4 w-4" />}
+          </div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold text-ink-900 truncate">
               {chat.sessions.find((s) => s.id === chat.activeSessionId)?.title || "聊天房间"}
             </h1>
+            {chat.activeCharacter && (
+              <p className="text-xs text-brand-500 truncate">{chat.activeCharacter.name}</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {chat.saveStatus === "saving" && (
-              <span className="text-xs text-ink-300">保存中...</span>
-            )}
-            {chat.saveStatus === "saved" && (
-              <span className="text-xs text-emerald-500">已保存</span>
-            )}
-            {chat.saveStatus === "error" && (
-              <span className="text-xs text-rose-500">保存失败</span>
-            )}
+            {chat.saveStatus === "saving" && <span className="text-xs text-ink-300">保存中...</span>}
+            {chat.saveStatus === "saved" && <span className="text-xs text-emerald-500">已保存</span>}
+            {chat.saveStatus === "error" && <span className="text-xs text-rose-500">保存失败</span>}
             <ModeBadge />
           </div>
         </div>
@@ -486,8 +495,98 @@ export function ChatRoomPage() {
           modelLabel={chat.modelLabel}
           apiConfigured={chat.apiConfigured}
           runtimeMode={chat.runtimeMode}
+          activeCharacter={chat.activeCharacter}
+          activeTemplate={chat.activeTemplate}
+          systemPrompt={chat.systemPrompt}
         />
       </div>
+
+      {/* Session creation picker: character + template */}
+      {showPicker && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setShowPicker(false)} />
+          <div className="relative bg-white rounded-2xl shadow-modal w-full max-w-sm mx-4 p-5 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-ink-900">新建会话</h3>
+              <button onClick={() => setShowPicker(false)} className="p-1 hover:bg-surface-100 rounded-full">
+                <X className="h-4 w-4 text-ink-400" />
+              </button>
+            </div>
+
+            {/* Step 1: Character */}
+            <p className="text-xs font-medium text-ink-500 mb-2">选择角色（可选）</p>
+            <div className="space-y-1 max-h-44 overflow-y-auto mb-4">
+              <button
+                onClick={() => setSelectedCharId(null)}
+                className={`w-full text-left px-3 py-2 rounded-card border transition-colors text-sm ${
+                  selectedCharId === null ? "border-brand-300 bg-brand-50 text-brand-700" : "border-surface-100 text-ink-500 hover:border-brand-200"
+                }`}
+              >
+                <UserCircle className="h-4 w-4 inline mr-2" />
+                不绑定角色
+              </button>
+              {pickerChars.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCharId(c.id)}
+                  className={`w-full text-left px-3 py-2 rounded-card border transition-colors flex items-center gap-3 ${
+                    selectedCharId === c.id ? "border-brand-300 bg-brand-50" : "border-surface-100 hover:border-brand-200"
+                  }`}
+                >
+                  <span className="h-7 w-7 rounded-lg bg-brand-50 text-brand-500 flex items-center justify-center text-sm flex-shrink-0">
+                    {c.avatar_emoji || c.name[0]}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-700 truncate">{c.name}</p>
+                    <p className="text-xs text-ink-300 truncate">{String((c.card_json as Record<string, unknown>)?.identity ?? "") || "无身份设定"}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Step 2: Template */}
+            <p className="text-xs font-medium text-ink-500 mb-2">选择提示词模板（可选）</p>
+            <div className="space-y-1 max-h-44 overflow-y-auto mb-4">
+              <button
+                onClick={() => setSelectedTplId(null)}
+                className={`w-full text-left px-3 py-2 rounded-card border transition-colors text-sm ${
+                  selectedTplId === null ? "border-brand-300 bg-brand-50 text-brand-700" : "border-surface-100 text-ink-500 hover:border-brand-200"
+                }`}
+              >
+                <UserCircle className="h-4 w-4 inline mr-2" />
+                不使用模板（默认角色提示词）
+              </button>
+              {pickerTemplates.length === 0 ? (
+                <p className="text-xs text-ink-300 px-3 py-4 text-center">
+                  暂无模板，可先去
+                  <Link to="/studio" className="text-brand-500 mx-1" onClick={() => setShowPicker(false)}>创作工坊</Link>
+                  创建
+                </p>
+              ) : (
+                pickerTemplates.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTplId(t.id)}
+                    className={`w-full text-left px-3 py-2 rounded-card border transition-colors ${
+                      selectedTplId === t.id ? "border-brand-300 bg-brand-50" : "border-surface-100 hover:border-brand-200"
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-ink-700 truncate">{t.title}</p>
+                    <p className="text-xs text-ink-300 truncate">{t.category} · {t.content.slice(0, 40)}</p>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Confirm */}
+            <button onClick={confirmCreateSession} className="btn-primary w-full text-sm">
+              创建会话
+              {selectedCharId && pickerChars.find((c) => c.id === selectedCharId) ? ` · ${pickerChars.find((c) => c.id === selectedCharId)!.name}` : ""}
+              {selectedTplId && pickerTemplates.find((t) => t.id === selectedTplId) ? ` · ${pickerTemplates.find((t) => t.id === selectedTplId)!.title}` : ""}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -35,7 +35,8 @@ export interface AuthState {
 export type AuthAction =
   | { type: "INIT_START" }
   | { type: "INIT_GUEST"; supabaseConfigured: boolean }
-  | { type: "INIT_AUTHENTICATED"; session: Session; user: User; profile: Profile; role: AppRole | null }
+  | { type: "INIT_AUTHENTICATED"; session: Session; user: User; profile: Profile | null; role: AppRole | null }
+  | { type: "INIT_ERROR" }
   | { type: "SIGNED_OUT" }
   | { type: "PROFILE_UPDATED"; profile: Profile };
 

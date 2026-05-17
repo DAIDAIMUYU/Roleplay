@@ -1,10 +1,13 @@
-import { Plus, Trash2, MessageCircle } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, MessageCircle, Search, X } from "lucide-react";
 
 interface SessionItem {
   id: string;
   title: string;
   mode: string;
   lastMessageAt: string | null;
+  characterName: string | null;
+  characterEmoji: string | null;
 }
 
 interface SessionListProps {
@@ -24,6 +27,12 @@ export function SessionList({
   onDelete,
   loading,
 }: SessionListProps) {
+  const [search, setSearch] = useState("");
+
+  const filtered = search
+    ? sessions.filter((s) => s.title.toLowerCase().includes(search.toLowerCase()))
+    : sessions;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -40,16 +49,35 @@ export function SessionList({
         </button>
       </div>
 
+      {/* Search */}
+      <div className="px-3 py-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-300" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索会话..."
+            className="w-full rounded-input border border-surface-200 bg-surface-50 py-1.5 pl-7 pr-6 text-xs focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2">
+              <X className="h-3 w-3 text-ink-300" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <p className="text-xs text-ink-300 text-center py-8">加载中...</p>
-        ) : sessions.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <p className="text-xs text-ink-300 text-center py-8 px-4">
-            暂无会话，点击 + 创建
+            {search ? "无匹配会话" : "暂无会话，点击 + 创建"}
           </p>
         ) : (
-          sessions.map((s) => (
+          filtered.map((s) => (
             <button
               key={s.id}
               onClick={() => onSelect(s.id)}
@@ -59,11 +87,9 @@ export function SessionList({
                   : "hover:bg-surface-50 border-r-2 border-transparent"
               }`}
             >
-              <MessageCircle
-                className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
-                  s.id === activeSessionId ? "text-brand-500" : "text-ink-300"
-                }`}
-              />
+              <div className="h-8 w-8 rounded-lg bg-surface-100 flex items-center justify-center flex-shrink-0 text-sm">
+                {s.characterEmoji || <MessageCircle className="h-4 w-4 text-ink-300" />}
+              </div>
               <div className="flex-1 min-w-0">
                 <p
                   className={`text-sm truncate ${
@@ -72,25 +98,24 @@ export function SessionList({
                 >
                   {s.title}
                 </p>
-                <p className="text-xs text-ink-300 mt-0.5">
-                  {s.mode === "demo_mock" ? "Demo" : s.mode}
+                {s.characterName && (
+                  <p className="text-xs text-brand-400 mt-0.5 truncate">{s.characterName}</p>
+                )}
+                <p className="text-xs text-ink-300">
+                  {s.mode === "demo_mock" ? "Demo" : ""}
                   {s.lastMessageAt && (
                     <>
                       {" · "}
                       {new Date(s.lastMessageAt).toLocaleTimeString("zh-CN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
+                        hour: "2-digit", minute: "2-digit",
                       })}
                     </>
                   )}
                 </p>
               </div>
-              {s.id === activeSessionId && onDelete && sessions.length > 1 && (
+              {s.id === activeSessionId && onDelete && filtered.length > 1 && (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(s.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
                   className="opacity-40 hover:opacity-100 transition-opacity p-0.5"
                   title="删除会话"
                 >

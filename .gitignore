@@ -21,3 +21,8 @@ Thumbs.db
 npm-debug.log*
 
 tsconfig.tsbuildinfo
+
+.claude/settings.local.json
+playwright-mcp/
+
+.playwright-mcp/
