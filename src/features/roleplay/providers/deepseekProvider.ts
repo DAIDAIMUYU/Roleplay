@@ -5,89 +5,88 @@ import type {
   TestResult,
   ChatMessage,
   ChatResult,
+  ChatStreamChunk,
   AppProblem,
 } from "./provider.types";
 import { translateError } from "./providerErrors";
-
-// DeepSeek Provider — BYOK, Phase 3.
-// Uses DeepSeek's OpenAI-compatible endpoint.
-// API Key is NEVER logged, stored in DB, or sent to any server except DeepSeek.
 
 export const deepseekProvider: ProviderAdapter = {
   id: "deepseek" as ProviderType,
 
   async testConnection(config: ModelProviderConfig): Promise<TestResult> {
     const start = performance.now();
-
     if (!config.apiKey) {
       return {
         ok: false,
         error: {
-          type: "missing_key",
-          title: "缺少 API Key",
-          status: 0,
+          type: "missing_key", title: "缺少 API Key", status: 0,
           detail: "请输入 DeepSeek API Key",
-          provider: "deepseek",
-          retryable: false,
+          provider: "deepseek", retryable: false,
         },
       };
     }
-
     try {
-      // Use /models as a lightweight connection test
       const resp = await fetch(`${config.baseURL}/models`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          Accept: "application/json",
-        },
+        headers: { Authorization: `Bearer ${config.apiKey}`, Accept: "application/json" },
       });
-
       const latencyMs = Math.round(performance.now() - start);
-
       if (!resp.ok) {
         const body = await resp.text().catch(() => "");
-        const error = translateError(
-          { status: resp.status, message: body },
-          "deepseek",
-        );
-        return { ok: false, latencyMs, error };
+        return { ok: false, latencyMs, error: translateError({ status: resp.status, message: body }, "deepseek") };
       }
-
       const data = await resp.json();
       const models = data?.data?.map((m: { id: string }) => m.id) ?? [];
-
       return { ok: true, latencyMs, models };
     } catch (err) {
-      const latencyMs = Math.round(performance.now() - start);
-      const error = translateError(err, "deepseek");
-      return { ok: false, latencyMs, error };
+      return { ok: false, latencyMs: Math.round(performance.now() - start), error: translateError(err, "deepseek") };
     }
   },
 
-  async chat(
+  async chat(config: ModelProviderConfig, messages: ChatMessage[]): Promise<ChatResult> {
+    if (!config.apiKey) throw new Error("缺少 API Key");
+    const resp = await fetch(`${config.baseURL}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify({
+        model: config.model || "deepseek-chat",
+        messages,
+        temperature: config.temperature ?? 0.8,
+        max_tokens: config.maxTokens ?? 1200,
+        stream: false,
+      }),
+    });
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => "");
+      throw translateError({ status: resp.status, message: errBody }, "deepseek");
+    }
+    const data = await resp.json();
+    const choice = data.choices?.[0];
+    return {
+      content: choice?.message?.content ?? "",
+      inputTokens: data.usage?.prompt_tokens,
+      outputTokens: data.usage?.completion_tokens,
+    };
+  },
+
+  async *chatStream(
     config: ModelProviderConfig,
     messages: ChatMessage[],
-  ): Promise<ChatResult> {
-    if (!config.apiKey) {
-      throw new Error("缺少 API Key");
-    }
-
-    const body = {
-      model: config.model || "deepseek-chat",
-      messages,
-      temperature: config.temperature ?? 0.8,
-      max_tokens: config.maxTokens ?? 1200,
-      stream: false, // Phase 3: non-streaming; Phase 4 adds streaming
-    };
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatStreamChunk> {
+    if (!config.apiKey) throw new Error("缺少 API Key");
 
     const resp = await fetch(`${config.baseURL}/chat/completions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify({
+        model: config.model || "deepseek-chat",
+        messages,
+        temperature: config.temperature ?? 0.8,
+        max_tokens: config.maxTokens ?? 1200,
+        stream: true,
+      }),
+      signal,
     });
 
     if (!resp.ok) {
@@ -95,14 +94,55 @@ export const deepseekProvider: ProviderAdapter = {
       throw translateError({ status: resp.status, message: errBody }, "deepseek");
     }
 
-    const data = await resp.json();
-    const choice = data.choices?.[0];
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("Stream not supported");
 
-    return {
-      content: choice?.message?.content ?? "",
-      inputTokens: data.usage?.prompt_tokens,
-      outputTokens: data.usage?.completion_tokens,
-    };
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let totalInput = 0;
+    let totalOutput = 0;
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          reader.cancel();
+          yield { content: "", done: true };
+          return;
+        }
+
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") {
+            yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
+            return;
+          }
+          try {
+            const json = JSON.parse(data);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta) {
+              totalOutput++;
+              yield { content: delta, done: false };
+            }
+            if (json.usage?.prompt_tokens) totalInput = json.usage.prompt_tokens;
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
   },
 
   normalizeError(err: unknown, provider: string): AppProblem {

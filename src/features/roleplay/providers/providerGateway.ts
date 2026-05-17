@@ -7,6 +7,7 @@ import type {
   TestResult,
   ChatMessage,
   ChatResult,
+  ChatStreamChunk,
   AppProblem,
 } from "./provider.types";
 import { AVAILABLE_PROVIDERS, DEFAULT_PROVIDER_CONFIG } from "./provider.types";
@@ -15,10 +16,6 @@ import { deepseekProvider } from "./deepseekProvider";
 import { openAICompatibleProvider } from "./openAICompatibleProvider";
 import { loadApiKey } from "../storage/apiKeyStorage";
 import { configError } from "./providerErrors";
-
-// Provider Gateway — single entry point for all model calls.
-// Routes between Mock (Guest/Demo) and real providers (BYOK).
-// Phase 3: test connection + basic chat. Streaming in Phase 4.
 
 const adapters = new Map<ProviderType, ProviderAdapter>([
   ["mock", mockProvider],
@@ -71,7 +68,7 @@ export function buildConfig(overrides: {
     apiKeyStorageMode: overrides.storageMode,
     temperature: overrides.temperature ?? DEFAULT_PROVIDER_CONFIG.temperature,
     maxTokens: overrides.maxTokens ?? DEFAULT_PROVIDER_CONFIG.maxTokens,
-    streamEnabled: overrides.streamEnabled ?? false,
+    streamEnabled: overrides.streamEnabled ?? true,
   };
 }
 
@@ -103,32 +100,16 @@ export function tryLoadApiKey(
 
 export function validateConfig(config: ModelProviderConfig): AppProblem | null {
   if (config.provider === "mock") return null;
-
-  if (!config.apiKey) {
-    return configError("缺少 API Key");
-  }
-
-  if (config.provider === "openai_compatible" && !config.baseURL) {
-    return configError("OpenAI Compatible 模式需要提供 Base URL");
-  }
-
-  if (!config.model) {
-    return configError("缺少 Model 名称");
-  }
-
+  if (!config.apiKey) return configError("缺少 API Key");
+  if (config.provider === "openai_compatible" && !config.baseURL) return configError("OpenAI Compatible 模式需要提供 Base URL");
+  if (!config.model) return configError("缺少 Model 名称");
   return null;
 }
 
-export async function testProviderConnection(
-  config: ModelProviderConfig,
-): Promise<TestResult> {
+export async function testProviderConnection(config: ModelProviderConfig): Promise<TestResult> {
   const validationError = validateConfig(config);
-  if (validationError) {
-    return { ok: false, error: validationError };
-  }
-
-  const adapter = getAdapter(config.provider);
-  return adapter.testConnection(config);
+  if (validationError) return { ok: false, error: validationError };
+  return getAdapter(config.provider).testConnection(config);
 }
 
 export async function sendProviderRequest(
@@ -136,16 +117,26 @@ export async function sendProviderRequest(
   config: ModelProviderConfig,
   messages: ChatMessage[],
 ): Promise<ChatResult> {
-  // Guest/Demo always uses Mock, regardless of config
-  if (isGuestOrDemo) {
-    return mockProvider.chat(config, messages);
-  }
+  if (isGuestOrDemo) return mockProvider.chat(config, messages);
+  const validationError = validateConfig(config);
+  if (validationError) throw validationError;
+  return getAdapter(config.provider).chat(config, messages);
+}
 
+// Phase 4: Streaming endpoint
+export function sendProviderStreamRequest(
+  isGuestOrDemo: boolean,
+  config: ModelProviderConfig,
+  messages: ChatMessage[],
+  signal?: AbortSignal,
+): AsyncIterable<ChatStreamChunk> {
+  if (isGuestOrDemo) return mockProvider.chatStream(config, messages, signal);
   const validationError = validateConfig(config);
   if (validationError) {
-    throw validationError;
+    // Return an async iterator that throws the error
+    return (async function* () {
+      throw validationError;
+    })();
   }
-
-  const adapter = getAdapter(config.provider);
-  return adapter.chat(config, messages);
+  return getAdapter(config.provider).chatStream(config, messages, signal);
 }

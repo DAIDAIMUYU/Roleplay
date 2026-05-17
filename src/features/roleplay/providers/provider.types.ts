@@ -1,4 +1,4 @@
-// Provider type system — Phase 3
+// Provider type system — Phase 3-4
 
 export type ProviderType = "mock" | "deepseek" | "openai_compatible";
 
@@ -33,7 +33,7 @@ export const DEFAULT_PROVIDER_CONFIG: Omit<ModelProviderConfig, "apiKey"> = {
   temperature: 0.8,
   maxTokens: 1200,
   contextMessageLimit: 20,
-  streamEnabled: false,
+  streamEnabled: true,
 };
 
 export interface ProviderMeta {
@@ -106,14 +106,25 @@ export interface ChatResult {
   outputTokens?: number;
 }
 
-// Provider Adapter interface (full implementation in Phases 3-4)
+// Phase 4: Streaming
+
+export interface ChatStreamChunk {
+  content: string;
+  done: boolean;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+// Provider Adapter interface
 
 export interface ProviderAdapter {
   readonly id: ProviderType;
   testConnection(config: ModelProviderConfig): Promise<TestResult>;
-  chat(
+  chat(config: ModelProviderConfig, messages: ChatMessage[]): Promise<ChatResult>;
+  chatStream(
     config: ModelProviderConfig,
     messages: ChatMessage[],
-  ): Promise<ChatResult>;
+    signal?: AbortSignal,
+  ): AsyncIterable<ChatStreamChunk>;
   normalizeError(err: unknown, provider: string): AppProblem;
 }

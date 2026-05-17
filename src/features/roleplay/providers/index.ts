@@ -9,6 +9,7 @@ export type {
   TestResult,
   ChatMessage,
   ChatResult,
+  ChatStreamChunk,
 } from "./provider.types";
 
 export {
@@ -32,4 +33,5 @@ export {
   validateConfig,
   testProviderConnection,
   sendProviderRequest,
+  sendProviderStreamRequest,
 } from "./providerGateway";
