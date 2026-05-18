@@ -51,25 +51,32 @@ export function packCharacterCard(data: CharacterCardData): Record<string, unkno
 }
 
 export const EMPTY_CARD: CharacterCardData = {
-  identity: "", appearance: "", personality: "", background: "",
-  speaking_style: "", relationship: "", relationship_stage: "",
-  user_nickname: "", greeting: "", forbidden_rules: "", likes: "",
+  identity: "",
+  appearance: "",
+  personality: "",
+  background: "",
+  speaking_style: "",
+  relationship: "",
+  relationship_stage: "",
+  user_nickname: "",
+  greeting: "",
+  forbidden_rules: "",
+  likes: "",
   extra_settings: {},
 };
 
-// Build the FULL system prompt sent to Provider.
-// Phase 5: merges character card + template content with variable substitution.
+// Build the full role system prompt sent to the provider.
 export function buildCharacterSystemPrompt(
   c: CharacterRow,
   templateContent?: string,
-): string | null {
+): string {
   const card = parseCharacterCard(c);
 
-  if (!card.identity && !card.personality && !templateContent) return null;
+  const roleParts: string[] = [
+    `你正在扮演「${c.name}」。`,
+    "你必须始终保持角色设定回复，不要自称 AI、模型或服务商，也不要跳出角色。",
+  ];
 
-  // Build role base prompt
-  const roleParts: string[] = [];
-  roleParts.push(`你正在扮演「${c.name}」`);
   if (card.identity) roleParts.push(`身份：${card.identity}`);
   if (card.personality) roleParts.push(`性格：${card.personality}`);
   if (card.appearance) roleParts.push(`外貌：${card.appearance}`);
@@ -80,34 +87,34 @@ export function buildCharacterSystemPrompt(
     if (card.relationship_stage) roleParts.push(`当前阶段：${card.relationship_stage}`);
   }
   if (card.user_nickname) roleParts.push(`称呼用户为：${card.user_nickname}`);
-  if (card.likes) roleParts.push(`喜欢：${card.likes}`);
+  if (card.likes) roleParts.push(`偏好：${card.likes}`);
   if (card.forbidden_rules) roleParts.push(`必须遵守：${card.forbidden_rules}`);
-  roleParts.push("请始终保持在角色设定内回复，不要跳出角色。");
 
   const rolePrompt = roleParts.join("\n");
 
-  // If template is provided, merge it WITH the role prompt
-  if (templateContent) {
-    const templateWithVars = templateContent
-      .replace(/\{\{character_name\}\}/g, c.name)
-      .replace(/\{\{user_name\}\}/g, card.user_nickname || "用户")
-      .replace(/\{\{current_scene\}\}/g, "（当前场景将在后续阶段动态注入）")
-      .replace(/\{\{relationship_stage\}\}/g, card.relationship_stage || "未设定")
-      .replace(/\{\{speaking_style\}\}/g, card.speaking_style || "自然对话")
-      .replace(/\{\{greeting\}\}/g, card.greeting || "");
+  if (!templateContent) return rolePrompt;
 
-    return `${templateWithVars}\n\n---\n角色基础设定（参考）：\n${rolePrompt}`;
-  }
+  const templateWithVars = templateContent
+    .replace(/\{\{character_name\}\}/g, c.name)
+    .replace(/\{\{user_name\}\}/g, card.user_nickname || "用户")
+    .replace(/\{\{current_scene\}\}/g, "（当前场景将在后续阶段动态注入）")
+    .replace(/\{\{relationship_stage\}\}/g, card.relationship_stage || "未设定")
+    .replace(/\{\{speaking_style\}\}/g, card.speaking_style || "自然对话")
+    .replace(/\{\{greeting\}\}/g, card.greeting || "");
 
-  return rolePrompt;
+  return `${templateWithVars}\n\n---\n角色基础设定：\n${rolePrompt}`;
 }
 
-// Session metadata helper: store/read template binding via system_prompt JSON
-export const SESSION_META_VERSION = 1;
+export const SESSION_META_VERSION = 2;
 
 export interface SessionMeta {
-  _template_id?: string;
   _meta_version: number;
+  _template_id?: string;
+  _worldbook_ids?: string[];
+  _memory_ids?: string[];
+  _disabled_worldbook_ids?: string[];
+  _disabled_memory_ids?: string[];
+  _summary_enabled?: boolean;
 }
 
 export function parseSessionMeta(systemPrompt: string | null): SessionMeta {
@@ -117,14 +124,12 @@ export function parseSessionMeta(systemPrompt: string | null): SessionMeta {
     if (parsed && typeof parsed === "object" && parsed._meta_version) {
       return parsed as SessionMeta;
     }
-  } catch { /* not JSON, treat as empty */ }
+  } catch {
+    // Old sessions may store a literal prompt here; phase 6 metadata starts fresh.
+  }
   return { _meta_version: SESSION_META_VERSION };
 }
 
-export function buildSessionMeta(templateId: string | null): string {
-  const meta: SessionMeta = {
-    _meta_version: SESSION_META_VERSION,
-    _template_id: templateId ?? undefined,
-  };
+export function buildSessionMeta(meta: SessionMeta): string {
   return JSON.stringify(meta);
 }

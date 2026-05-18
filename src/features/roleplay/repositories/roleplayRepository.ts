@@ -152,6 +152,32 @@ export async function listCharacters(
   return (data as CharacterRow[]) ?? [];
 }
 
+export async function listActiveCharacters(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<CharacterRow[]> {
+  const { data } = await supabase
+    .from("characters")
+    .select("*")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .order("updated_at", { ascending: false });
+  return (data as CharacterRow[]) ?? [];
+}
+
+export async function listCharactersByIds(
+  supabase: SupabaseClient,
+  characterIds: string[],
+): Promise<CharacterRow[]> {
+  if (characterIds.length === 0) return [];
+  const { data } = await supabase
+    .from("characters")
+    .select("*")
+    .in("id", characterIds);
+  return (data as CharacterRow[]) ?? [];
+}
+
 export async function getCharacter(
   supabase: SupabaseClient,
   characterId: string,
@@ -227,6 +253,7 @@ export async function listSessions(
     .from("sessions")
     .select("*")
     .eq("user_id", userId)
+    .eq("status", "active")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   return (data as SessionRow[]) ?? [];
@@ -310,6 +337,18 @@ export async function listSessionParticipants(
   return (data as import("../types/database").SessionParticipantRow[]) ?? [];
 }
 
+export async function listSessionParticipantsForSessions(
+  supabase: SupabaseClient,
+  sessionIds: string[],
+): Promise<import("../types/database").SessionParticipantRow[]> {
+  if (sessionIds.length === 0) return [];
+  const { data } = await supabase
+    .from("session_participants")
+    .select("*")
+    .in("session_id", sessionIds);
+  return (data as import("../types/database").SessionParticipantRow[]) ?? [];
+}
+
 export async function ensureSessionParticipant(
   supabase: SupabaseClient,
   userId: string,
@@ -358,6 +397,9 @@ export async function createMessage(
   userId: string,
   input: CreateMessage,
 ): Promise<MessageRow | null> {
+  if (input.role === "assistant" && "character_id" in input && input.character_id === undefined) {
+    console.warn("[Repo] assistant message is being saved without character_id.");
+  }
   const { data } = await supabase
     .from("messages")
     .insert({ ...input, user_id: userId })
@@ -484,7 +526,66 @@ export async function listWorldbooks(
   return (data as WorldbookRow[]) ?? [];
 }
 
+export async function getWorldbook(
+  supabase: SupabaseClient,
+  worldbookId: string,
+): Promise<WorldbookRow | null> {
+  try {
+    const { data } = await supabase.from("worldbooks").select("*").eq("id", worldbookId).maybeSingle();
+    return data as WorldbookRow | null;
+  } catch { return null; }
+}
+
+export async function createWorldbook(
+  supabase: SupabaseClient,
+  userId: string,
+  input: { name: string; description?: string; tags?: string[] },
+): Promise<WorldbookRow | null> {
+  const { data } = await supabase
+    .from("worldbooks").insert({ ...input, user_id: userId }).select().maybeSingle();
+  return data as WorldbookRow | null;
+}
+
+export async function updateWorldbook(
+  supabase: SupabaseClient,
+  worldbookId: string,
+  input: { name?: string; description?: string; tags?: string[] },
+): Promise<WorldbookRow | null> {
+  const { data } = await supabase
+    .from("worldbooks").update(input).eq("id", worldbookId).select().maybeSingle();
+  return data as WorldbookRow | null;
+}
+
+export async function deleteWorldbook(
+  supabase: SupabaseClient,
+  worldbookId: string,
+): Promise<void> {
+  await supabase.from("worldbooks").delete().eq("id", worldbookId);
+}
+
 // ---------- worldbook entries ----------
+
+export async function getWorldbookEntry(
+  supabase: SupabaseClient,
+  entryId: string,
+): Promise<WorldbookEntryRow | null> {
+  try {
+    const { data } = await supabase.from("worldbook_entries").select("*").eq("id", entryId).maybeSingle();
+    return data as WorldbookEntryRow | null;
+  } catch { return null; }
+}
+
+export async function listAllWorldbookEntries(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<WorldbookEntryRow[]> {
+  const { data } = await supabase
+    .from("worldbook_entries")
+    .select("*")
+    .eq("user_id", userId)
+    .order("priority", { ascending: false });
+  return (data as WorldbookEntryRow[]) ?? [];
+}
 
 export async function listWorldbookEntries(
   supabase: SupabaseClient,
@@ -533,6 +634,29 @@ export async function deleteWorldbookEntry(
 }
 
 // ---------- memories ----------
+
+export async function getMemory(
+  supabase: SupabaseClient,
+  memoryId: string,
+): Promise<MemoryRow | null> {
+  try {
+    const { data } = await supabase.from("memories").select("*").eq("id", memoryId).maybeSingle();
+    return data as MemoryRow | null;
+  } catch { return null; }
+}
+
+export async function listAllActiveMemories(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<MemoryRow[]> {
+  const { data } = await supabase
+    .from("memories")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("salience", { ascending: false });
+  return (data as MemoryRow[]) ?? [];
+}
 
 export async function listMemories(
   supabase: SupabaseClient,

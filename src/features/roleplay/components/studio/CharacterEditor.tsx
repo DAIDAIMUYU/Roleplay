@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
-import type { CharacterRow } from "../../types/database";
+import { X, Plus, Trash2, BookOpen } from "lucide-react";
+import type { CharacterRow, WorldbookRow } from "../../types/database";
 import type { CharacterCardData } from "../../utils/characterPrompt";
 import { parseCharacterCard, EMPTY_CARD } from "../../utils/characterPrompt";
+import { supabase } from "../../../auth/supabaseClient";
+import * as Repo from "../../repositories/roleplayRepository";
 
 interface CharacterEditorProps {
   character: CharacterRow | null; // null = create new
@@ -38,33 +40,48 @@ export function CharacterEditor({ character, onSave, onClose }: CharacterEditorP
   const [tagInput, setTagInput] = useState("");
   const [card, setCard] = useState<CharacterCardData>(EMPTY_CARD);
   const [saving, setSaving] = useState(false);
+  const [boundWbIds, setBoundWbIds] = useState<string[]>([]);
+  const [availableWbs, setAvailableWbs] = useState<WorldbookRow[]>([]);
 
   useEffect(() => {
     if (character) {
       setName(character.name);
       setEmoji(character.avatar_emoji || "");
       setTags(character.tags ?? []);
-      setCard(parseCharacterCard(character));
+      const c = parseCharacterCard(character);
+      setCard(c);
+      setBoundWbIds((c.extra_settings?.bound_worldbook_ids as string[]) ?? []);
     } else {
-      setName("");
-      setEmoji("");
-      setTags([]);
-      setCard(EMPTY_CARD);
+      setName(""); setEmoji(""); setTags([]); setCard(EMPTY_CARD); setBoundWbIds([]);
     }
   }, [character]);
 
-  function addTag() {
-    const t = tagInput.trim();
-    if (t && !tags.includes(t)) {
-      setTags([...tags, t]);
-    }
-    setTagInput("");
+  useEffect(() => {
+    if (!supabase) return;
+    // We can't get userId easily here, but we load from the character's user_id
+    // For simplicity, load worldbooks on mount and when character changes
+    const loadWbs = async () => {
+      const uid = character?.user_id;
+      if (!uid) return;
+      const wbs = await Repo.listWorldbooks(supabase!, uid);
+      setAvailableWbs(wbs);
+    };
+    loadWbs();
+  }, [character]);
+
+  function toggleWb(wbId: string) {
+    setBoundWbIds((prev) => prev.includes(wbId) ? prev.filter((id) => id !== wbId) : [...prev, wbId]);
   }
+
+  function addTag() { const t = tagInput.trim(); if (t && !tags.includes(t)) setTags([...tags, t]); setTagInput(""); }
 
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave(name.trim(), { ...card, extra_settings: card.extra_settings ?? {} }, tags);
+    await onSave(name.trim(), {
+      ...card,
+      extra_settings: { ...card.extra_settings, bound_worldbook_ids: boundWbIds },
+    }, tags);
     setSaving(false);
     onClose();
   }
@@ -169,6 +186,23 @@ export function CharacterEditor({ character, onSave, onClose }: CharacterEditorP
               </div>
             )}
           </div>
+
+          {/* Worldbook binding */}
+          {availableWbs.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-ink-500 mb-2">关联世界书</label>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {availableWbs.map((wb) => (
+                  <label key={wb.id} className="flex items-center gap-2.5 px-3 py-2 rounded-card border border-surface-100 cursor-pointer hover:border-brand-200 transition-colors">
+                    <input type="checkbox" checked={boundWbIds.includes(wb.id)} onChange={() => toggleWb(wb.id)} className="rounded" />
+                    <BookOpen className="h-3.5 w-3.5 text-sky-500" />
+                    <span className="text-sm text-ink-700 truncate flex-1">{wb.name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-ink-300 mt-1">勾选的世界书将在聊天时参与上下文匹配</p>
+            </div>
+          )}
 
           {/* Save */}
           <div className="flex gap-2 pt-2">

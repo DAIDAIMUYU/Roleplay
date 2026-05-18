@@ -32,7 +32,7 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
     if (isDemo || !supabase || !userId) return;
     setLoading(true);
     try {
-      const rows = await Repo.listCharacters(supabase, userId);
+      const rows = await Repo.listActiveCharacters(supabase, userId);
       setCharacters(rows);
     } catch (e) {
       setError(String(e));
@@ -107,6 +107,7 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
 
   // Filtering
   const filtered = characters.filter((c) => {
+    if (c.deleted_at || c.archived_at) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchesName = c.name.toLowerCase().includes(q);

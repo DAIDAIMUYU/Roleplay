@@ -113,7 +113,7 @@ export function SessionList({
                   )}
                 </p>
               </div>
-              {s.id === activeSessionId && onDelete && filtered.length > 1 && (
+              {s.id === activeSessionId && onDelete && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
                   className="opacity-40 hover:opacity-100 transition-opacity p-0.5"
