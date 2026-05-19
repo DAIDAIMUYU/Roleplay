@@ -17,6 +17,7 @@ import { openAICompatibleProvider } from "./openAICompatibleProvider";
 import { configError } from "./providerErrors";
 import { sendHostedProviderChat, testHostedCredential } from "../services/hostedCredentialsService";
 import { loadApiKey } from "../storage/apiKeyStorage";
+import { getCompatibilityAdapterType } from "./providerPresets";
 
 const adapters = new Map<ProviderType, ProviderAdapter>([
   ["mock", mockProvider],
@@ -25,8 +26,9 @@ const adapters = new Map<ProviderType, ProviderAdapter>([
 ]);
 
 function getAdapter(provider: ProviderType): ProviderAdapter {
-  const adapter = adapters.get(provider);
-  if (!adapter) throw new Error(`Unknown provider: ${provider}`);
+  const adapterType = getCompatibilityAdapterType(provider);
+  const adapter = adapters.get(adapterType);
+  if (!adapter) throw new Error(`Unknown provider adapter: ${adapterType} (for preset ${provider})`);
   return adapter;
 }
 

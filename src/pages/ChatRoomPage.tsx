@@ -9,6 +9,12 @@ import { ChatInput } from "../features/roleplay/components/chat/ChatInput";
 import { MessageBubble } from "../features/roleplay/components/chat/MessageBubble";
 import { SessionList } from "../features/roleplay/components/chat/SessionList";
 import { loadApiKey } from "../features/roleplay/storage/apiKeyStorage";
+import { getEnabledConfig } from "../features/roleplay/storage/apiProviderConfigStorage";
+import {
+  getDefaultHostedCredential,
+  saveHostedCredentialSelection,
+  selectionFromCredential,
+} from "../features/roleplay/services/hostedCredentialsService";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import { EmptyState } from "../shared/components/EmptyState";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
@@ -17,12 +23,6 @@ import * as LocalRepo from "../features/roleplay/repositories/localRoleplayRepos
 import type { CharacterRow } from "../features/roleplay/types/database";
 import type { ChatMessage } from "../features/roleplay/providers/provider.types";
 import type { ApiKeyStorageMode, ProviderType } from "../features/roleplay/providers";
-import {
-  getDefaultHostedCredential,
-  loadHostedCredentialSelection,
-  saveHostedCredentialSelection,
-  selectionFromCredential,
-} from "../features/roleplay/services/hostedCredentialsService";
 
 function detectProviderConfig(): {
   provider: ProviderType;
@@ -31,6 +31,27 @@ function detectProviderConfig(): {
   credentialId?: string | null;
   baseURL?: string;
 } {
+  // 1. Check new enabled config system first
+  const enabled = getEnabledConfig();
+  if (enabled && enabled.storageMode !== "hosted_encrypted") {
+    return {
+      provider: enabled.provider,
+      model: enabled.model,
+      storageMode: enabled.storageMode,
+      baseURL: enabled.baseURL || undefined,
+    };
+  }
+  if (enabled?.storageMode === "hosted_encrypted" && enabled.credentialId) {
+    return {
+      provider: enabled.provider,
+      model: enabled.model,
+      storageMode: "hosted_encrypted",
+      credentialId: enabled.credentialId,
+      baseURL: enabled.baseURL || undefined,
+    };
+  }
+
+  // 2. Fallback: old direct API key checks for backward compatibility
   const local = loadApiKey("deepseek", "local_device");
   if (local) return { provider: "deepseek", model: local.model, storageMode: "local_device" };
   const session = loadApiKey("deepseek", "session_only");
@@ -39,17 +60,8 @@ function detectProviderConfig(): {
   if (oaiLocal) return { provider: "openai_compatible", model: oaiLocal.model, storageMode: "local_device" };
   const oaiSession = loadApiKey("openai_compatible", "session_only");
   if (oaiSession) return { provider: "openai_compatible", model: oaiSession.model, storageMode: "session_only" };
-  const hosted = loadHostedCredentialSelection();
-  if (hosted) {
-    return {
-      provider: hosted.provider,
-      model: hosted.model,
-      storageMode: "hosted_encrypted",
-      credentialId: hosted.credentialId,
-      baseURL: hosted.baseURL,
-    };
-  }
-  return { provider: "deepseek", model: "deepseek-chat", storageMode: "session_only" };
+
+  return { provider: "deepseek", model: "deepseek-v4-flash", storageMode: "session_only" };
 }
 
 function MemorySuggestionModal({

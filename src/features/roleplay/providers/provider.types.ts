@@ -1,4 +1,15 @@
-export type ProviderType = "mock" | "deepseek" | "openai_compatible";
+export type ProviderType =
+  | "mock"
+  | "deepseek"
+  | "openai"
+  | "openrouter"
+  | "siliconflow"
+  | "moonshot"
+  | "qwen"
+  | "gemini"
+  | "claude"
+  | "grok"
+  | "openai_compatible";
 
 export type ApiKeyStorageMode =
   | "session_only"
@@ -26,7 +37,7 @@ export interface ModelProviderConfig {
 
 export const DEFAULT_PROVIDER_CONFIG: Omit<ModelProviderConfig, "apiKey"> = {
   provider: "deepseek",
-  model: "deepseek-chat",
+  model: "deepseek-v4-flash",
   baseURL: "https://api.deepseek.com/v1",
   apiKeyStorageMode: "session_only",
   temperature: 0.8,
@@ -46,33 +57,17 @@ export interface ProviderMeta {
 }
 
 export const AVAILABLE_PROVIDERS: ProviderMeta[] = [
-  {
-    id: "mock",
-    label: "本地预览",
-    description: "用于网页本地模式的预览回复，不调用真实模型，也不会消耗真实 API。",
-    defaultBaseURL: "",
-    defaultModel: "mock",
-    requiresBaseURL: false,
-    enabled: true,
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek",
-    description: "使用你自己的 DeepSeek API Key。",
-    defaultBaseURL: "https://api.deepseek.com/v1",
-    defaultModel: "deepseek-chat",
-    requiresBaseURL: false,
-    enabled: true,
-  },
-  {
-    id: "openai_compatible",
-    label: "OpenAI Compatible",
-    description: "兼容 OpenAI API 格式的服务商。",
-    defaultBaseURL: "",
-    defaultModel: "",
-    requiresBaseURL: true,
-    enabled: true,
-  },
+  { id: "mock", label: "本地预览", description: "不调用真实模型，也不会消耗 API。", defaultBaseURL: "", defaultModel: "mock", requiresBaseURL: false, enabled: true },
+  { id: "deepseek", label: "DeepSeek", description: "DeepSeek API · 高性价比中文模型", defaultBaseURL: "https://api.deepseek.com/v1", defaultModel: "deepseek-v4-flash", requiresBaseURL: false, enabled: true },
+  { id: "openai", label: "OpenAI", description: "OpenAI API · GPT 系列模型", defaultBaseURL: "https://api.openai.com/v1", defaultModel: "gpt-4o", requiresBaseURL: false, enabled: true },
+  { id: "openrouter", label: "OpenRouter", description: "聚合平台，可访问多种模型", defaultBaseURL: "https://openrouter.ai/api/v1", defaultModel: "deepseek/deepseek-chat", requiresBaseURL: false, enabled: true },
+  { id: "siliconflow", label: "SiliconFlow (硅基流动)", description: "多种开源和商用模型", defaultBaseURL: "https://api.siliconflow.cn/v1", defaultModel: "deepseek-ai/DeepSeek-V3", requiresBaseURL: false, enabled: true },
+  { id: "moonshot", label: "Moonshot / Kimi", description: "月之暗面 Kimi 平台", defaultBaseURL: "https://api.moonshot.cn/v1", defaultModel: "moonshot-v1-8k", requiresBaseURL: false, enabled: true },
+  { id: "qwen", label: "通义千问 (Qwen)", description: "阿里云通义千问模型", defaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus", requiresBaseURL: false, enabled: true },
+  { id: "grok", label: "xAI Grok", description: "xAI Grok 模型 · OpenAI 兼容接口", defaultBaseURL: "https://api.x.ai/v1", defaultModel: "grok-3", requiresBaseURL: false, enabled: true },
+  { id: "gemini", label: "Google Gemini", description: "需要专用适配器 · 建议通过 OpenRouter 中转", defaultBaseURL: "", defaultModel: "gemini-2.5-pro", requiresBaseURL: false, enabled: false },
+  { id: "claude", label: "Anthropic Claude", description: "需要专用适配器 · 建议通过 OpenRouter 中转", defaultBaseURL: "", defaultModel: "claude-sonnet-4-6", requiresBaseURL: false, enabled: false },
+  { id: "openai_compatible", label: "自定义 OpenAI Compatible", description: "兼容 OpenAI API 格式的任意服务商", defaultBaseURL: "", defaultModel: "", requiresBaseURL: true, enabled: true },
 ];
 
 export interface AppProblem {

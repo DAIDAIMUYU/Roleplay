@@ -15,57 +15,29 @@ import {
 import { useAuth } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
-import { loadApiKey } from "../features/roleplay/storage/apiKeyStorage";
-import { loadHostedCredentialSelection } from "../features/roleplay/services/hostedCredentialsService";
+import { getEnabledConfig } from "../features/roleplay/storage/apiProviderConfigStorage";
+import { getPresetName } from "../features/roleplay/providers/providerPresets";
+import { getStorageModeLabel } from "../features/roleplay/storage/apiKeyStorage";
 
 type ApiCredentialState =
   | { mode: "unconfigured"; title: string; detail: string }
-  | { mode: "session_only" | "local_device" | "hosted_encrypted"; title: string; detail: string; provider: string; model: string };
+  | { mode: "configured"; title: string; detail: string; provider: string; model: string; testStatus: string };
 
 function getApiCredentialState(): ApiCredentialState {
-  const hosted = loadHostedCredentialSelection();
-  if (hosted) {
-    return {
-      mode: "hosted_encrypted",
-      title: "托管加密",
-      detail: "API Key 通过服务端加密后保存到云端凭据库中，前端不会展示明文 Key，适合跨设备使用。",
-      provider: hosted.provider === "deepseek" ? "DeepSeek" : "OpenAI Compatible",
-      model: hosted.model,
-    };
+  const enabled = getEnabledConfig();
+  if (!enabled) {
+    return { mode: "unconfigured", title: "未配置", detail: "尚未启用 API 配置，当前无法调用真实模型。" };
   }
-
-  const providers = ["deepseek", "openai_compatible"] as const;
-
-  for (const provider of providers) {
-    const local = loadApiKey(provider, "local_device");
-    if (local) {
-      return {
-        mode: "local_device",
-        title: "本地设备",
-        detail: "API Key 保存在当前浏览器本地，不会上传云端。清除浏览器网站数据、更换浏览器或更换设备后需要重新配置。",
-        provider: provider === "deepseek" ? "DeepSeek" : "OpenAI Compatible",
-        model: local.model,
-      };
-    }
-  }
-
-  for (const provider of providers) {
-    const session = loadApiKey(provider, "session_only");
-    if (session) {
-      return {
-        mode: "session_only",
-        title: "临时会话",
-        detail: "API Key 仅保存在当前网页会话中。关闭页面或刷新后可能需要重新填写，不会上传云端。",
-        provider: provider === "deepseek" ? "DeepSeek" : "OpenAI Compatible",
-        model: session.model,
-      };
-    }
-  }
-
+  const providerName = getPresetName(enabled.provider);
+  const storageLabel = getStorageModeLabel(enabled.storageMode);
+  const testLabel = enabled.testStatus === "ok" ? "测试成功" : enabled.testStatus === "failed" ? "测试失败" : "未测试";
   return {
-    mode: "unconfigured",
-    title: "未配置",
-    detail: "尚未配置 API，当前无法调用真实模型。",
+    mode: "configured",
+    title: `${providerName} / ${enabled.model || "未选择模型"}`,
+    detail: `${storageLabel} · ${testLabel}${enabled.lastTestedAt ? ` · ${new Date(enabled.lastTestedAt).toLocaleString()}` : ""}`,
+    provider: providerName,
+    model: enabled.model,
+    testStatus: enabled.testStatus,
   };
 }
 
@@ -172,11 +144,21 @@ export function LandingPage() {
         <StatusCard title="API 凭据状态" icon={<KeyRound className="h-4 w-4" />}>
           <p className="font-medium text-ink-700">{apiState.title}</p>
           {"provider" in apiState ? (
-            <p className="text-xs text-ink-400">
-              当前配置：{apiState.provider} / {apiState.model || "未选择模型"}
-            </p>
+            <>
+              <p className="text-xs text-ink-400">
+                当前配置：{apiState.provider} / {apiState.model || "未选择模型"}
+              </p>
+              {"testStatus" in apiState ? (
+                <span className="inline-flex items-center gap-1.5 text-xs">
+                  <span className={`inline-block h-2 w-2 rounded-full ${
+                    apiState.testStatus === "ok" ? "bg-emerald-500" : apiState.testStatus === "failed" ? "bg-rose-500" : "bg-ink-300"
+                  }`} />
+                  {apiState.testStatus === "ok" ? "测试通过" : apiState.testStatus === "failed" ? "测试失败" : "未测试"}
+                </span>
+              ) : null}
+            </>
           ) : null}
-          <p>{apiState.detail}</p>
+          <p className="text-xs text-ink-400">{apiState.detail}</p>
           <div className="rounded-card bg-surface-50 p-3 text-xs text-ink-400">
             数据导出备份不会包含 API Key、密文、IV 或任何 Secrets。
           </div>
