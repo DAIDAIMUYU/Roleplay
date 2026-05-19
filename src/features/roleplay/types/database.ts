@@ -268,6 +268,38 @@ export interface BackupArtifactRow {
   expires_at: string | null;
 }
 
+export interface ProviderCredentialRow {
+  id: string;
+  user_id: string;
+  label: string | null;
+  provider_type: "deepseek" | "openai_compatible";
+  base_url: string | null;
+  default_model: string | null;
+  storage_mode: "hosted_encrypted";
+  status: "active" | "disabled" | "deleted";
+  is_default: boolean;
+  last_tested_at: string | null;
+  last_used_at: string | null;
+  last_error: string | null;
+  key_fingerprint: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface ProviderCredentialSecretRow {
+  id: string;
+  credential_id: string;
+  user_id: string;
+  encrypted_api_key: string;
+  encryption_iv: string;
+  encryption_alg: string;
+  encryption_key_version: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface AuditEventRow {
   id: string;
   actor_user_id: string | null;

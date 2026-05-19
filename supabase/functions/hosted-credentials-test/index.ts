@@ -1,0 +1,72 @@
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { handleCorsPreflight } from "../_shared/cors.ts";
+import { requireUser } from "../_shared/auth.ts";
+import { decryptApiKey } from "../_shared/crypto.ts";
+import { getCredentialForUser } from "../_shared/credentials.ts";
+import { errorResponse, jsonResponse } from "../_shared/json.ts";
+import { mapProviderError, normalizeBaseUrl, providerListModels } from "../_shared/provider.ts";
+
+serve(async (request) => {
+  const preflight = handleCorsPreflight(request);
+  if (preflight) return preflight;
+
+  if (request.method !== "POST") {
+    return errorResponse(request, 405, "Method not allowed.");
+  }
+
+  const auth = await requireUser(request);
+  if (!auth.user) return auth.errorResponse;
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse(request, 400, "请求体不是有效 JSON。");
+  }
+
+  const credentialId = typeof body.credential_id === "string" ? body.credential_id : "";
+  if (!credentialId) {
+    return errorResponse(request, 400, "缺少 credential_id。");
+  }
+
+  try {
+    const { credential, secret } = await getCredentialForUser(auth.serviceClient, auth.user, credentialId);
+    const apiKey = await decryptApiKey(secret.encrypted_api_key, secret.encryption_iv);
+    const startedAt = Date.now();
+    const models = await providerListModels({
+      providerType: credential.provider_type,
+      baseUrl: normalizeBaseUrl(credential.provider_type, credential.base_url),
+      apiKey,
+    });
+
+    await auth.serviceClient
+      .from("provider_credentials")
+      .update({
+        last_tested_at: new Date().toISOString(),
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", credential.id)
+      .eq("user_id", auth.user.id);
+
+    return jsonResponse(request, {
+      ok: true,
+      latencyMs: Date.now() - startedAt,
+      models: models.slice(0, 20),
+    });
+  } catch (error) {
+    const mapped = mapProviderError(error);
+    await auth.serviceClient
+      .from("provider_credentials")
+      .update({
+        last_tested_at: new Date().toISOString(),
+        last_error: mapped.detail,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", typeof body.credential_id === "string" ? body.credential_id : "")
+      .eq("user_id", auth.user.id)
+      .is("deleted_at", null);
+
+    return errorResponse(request, mapped.status, mapped.detail);
+  }
+});

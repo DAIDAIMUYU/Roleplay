@@ -113,6 +113,8 @@ export function useChatSession(
   storedProvider: ProviderType,
   storedModel: string,
   storageMode: ApiKeyStorageMode,
+  hostedCredentialId?: string | null,
+  hostedBaseURL?: string | null,
 ): ChatState & ChatActions {
   const [state, setState] = useState<ChatState>({
     sessions: [],
@@ -154,10 +156,11 @@ export function useChatSession(
 
   const getApiKey = useCallback((): string | null => {
     if (isDemo) return "mock-no-key-needed";
+    if (storageMode === "hosted_encrypted") return null;
     return loadApiKey(storedProvider, storageMode)?.apiKey ?? null;
   }, [isDemo, storedProvider, storageMode]);
 
-  const apiConfigured = !isDemo && getApiKey() !== null;
+  const apiConfigured = !isDemo && (storageMode === "hosted_encrypted" ? !!hostedCredentialId : getApiKey() !== null);
 
   const buildConfig = useCallback((): ModelProviderConfig => {
     return buildConfigFromStorage(
@@ -165,9 +168,22 @@ export function useChatSession(
       getApiKey() || "",
       storageMode,
       stateRef.current.model,
-      undefined,
+      hostedBaseURL || undefined,
+      hostedCredentialId ?? null,
     );
-  }, [getApiKey, isDemo, storageMode, storedProvider]);
+  }, [getApiKey, hostedBaseURL, hostedCredentialId, isDemo, storageMode, storedProvider]);
+
+  useEffect(() => {
+    setState((current) => {
+      const nextModel = storedModel || DEFAULT_PROVIDER_CONFIG.model;
+      if (current.provider === storedProvider && current.model === nextModel) return current;
+      return {
+        ...current,
+        provider: storedProvider,
+        model: nextModel,
+      };
+    });
+  }, [storedModel, storedProvider]);
 
   const syncMeta = useCallback(async (updates: Partial<SessionMeta>) => {
     if (isDemo || !supabase || !userId || !stateRef.current.activeSessionId) return;
@@ -970,7 +986,13 @@ export function useChatSession(
 
   const providerLabel = isDemo ? "Mock (Demo)" : storedProvider === "deepseek" ? "DeepSeek" : "OpenAI Compatible";
   const modelLabel = isDemo ? "mock" : state.model;
-  const runtimeMode = isDemo ? "demo_mock" : storageMode === "local_device" ? "byok_local_device" : "byok_session_only";
+  const runtimeMode = isDemo
+    ? "demo_mock"
+    : storageMode === "hosted_encrypted"
+      ? "hosted_encrypted"
+      : storageMode === "local_device"
+        ? "byok_local_device"
+        : "byok_session_only";
   const systemPrompt = state.lastContextOutput?.systemPrompt || (state.activeCharacter ? buildCharacterSystemPrompt(state.activeCharacter, state.activeTemplate?.content) : null);
 
   return {

@@ -5,19 +5,20 @@ export type ProviderType = "mock" | "deepseek" | "openai_compatible";
 export type ApiKeyStorageMode =
   | "session_only"
   | "local_device"
-  | "hosted_encrypted_future";
+  | "hosted_encrypted";
 
 export type ProviderRuntimeMode =
   | "demo_mock"
   | "byok_session"
   | "byok_local_device"
-  | "hosted_encrypted_future";
+  | "hosted_encrypted";
 
 export interface ModelProviderConfig {
   provider: ProviderType;
   model: string;
   baseURL: string;
   apiKey: string;
+  credentialId?: string | null;
   apiKeyStorageMode: ApiKeyStorageMode;
   temperature: number;
   maxTokens: number;

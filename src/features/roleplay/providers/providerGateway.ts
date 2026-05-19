@@ -1,21 +1,22 @@
 import type {
-  ProviderAdapter,
-  ProviderMeta,
-  ProviderType,
-  ProviderRuntimeMode,
-  ModelProviderConfig,
-  TestResult,
+  AppProblem,
   ChatMessage,
   ChatResult,
   ChatStreamChunk,
-  AppProblem,
+  ModelProviderConfig,
+  ProviderAdapter,
+  ProviderMeta,
+  ProviderRuntimeMode,
+  ProviderType,
+  TestResult,
 } from "./provider.types";
 import { AVAILABLE_PROVIDERS, DEFAULT_PROVIDER_CONFIG } from "./provider.types";
-import { mockProvider } from "./mockProvider";
 import { deepseekProvider } from "./deepseekProvider";
+import { mockProvider } from "./mockProvider";
 import { openAICompatibleProvider } from "./openAICompatibleProvider";
-import { loadApiKey } from "../storage/apiKeyStorage";
 import { configError } from "./providerErrors";
+import { sendHostedProviderChat, testHostedCredential } from "../services/hostedCredentialsService";
+import { loadApiKey } from "../storage/apiKeyStorage";
 
 const adapters = new Map<ProviderType, ProviderAdapter>([
   ["mock", mockProvider],
@@ -29,14 +30,12 @@ function getAdapter(provider: ProviderType): ProviderAdapter {
   return adapter;
 }
 
-// ---------- public API ----------
-
 export function getAvailableProviders(): ProviderMeta[] {
-  return AVAILABLE_PROVIDERS.filter((p) => p.enabled);
+  return AVAILABLE_PROVIDERS.filter((provider) => provider.enabled);
 }
 
 export function getProviderMeta(provider: ProviderType): ProviderMeta | undefined {
-  return AVAILABLE_PROVIDERS.find((p) => p.id === provider);
+  return AVAILABLE_PROVIDERS.find((meta) => meta.id === provider);
 }
 
 export function resolveRuntimeMode(
@@ -46,7 +45,7 @@ export function resolveRuntimeMode(
   if (isGuestOrDemo) return "demo_mock";
   if (storageMode === "session_only") return "byok_session";
   if (storageMode === "local_device") return "byok_local_device";
-  return "hosted_encrypted_future";
+  return "hosted_encrypted";
 }
 
 export function buildConfig(overrides: {
@@ -54,6 +53,7 @@ export function buildConfig(overrides: {
   model: string;
   baseURL: string;
   apiKey: string;
+  credentialId?: string | null;
   storageMode: ModelProviderConfig["apiKeyStorageMode"];
   temperature?: number;
   maxTokens?: number;
@@ -65,6 +65,7 @@ export function buildConfig(overrides: {
     model: overrides.model,
     baseURL: overrides.baseURL,
     apiKey: overrides.apiKey,
+    credentialId: overrides.credentialId ?? null,
     apiKeyStorageMode: overrides.storageMode,
     temperature: overrides.temperature ?? DEFAULT_PROVIDER_CONFIG.temperature,
     maxTokens: overrides.maxTokens ?? DEFAULT_PROVIDER_CONFIG.maxTokens,
@@ -78,6 +79,7 @@ export function buildConfigFromStorage(
   storageMode: ModelProviderConfig["apiKeyStorageMode"],
   model?: string,
   baseURL?: string,
+  credentialId?: string | null,
 ): ModelProviderConfig {
   const meta = getProviderMeta(provider);
   return buildConfig({
@@ -85,6 +87,7 @@ export function buildConfigFromStorage(
     model: model || meta?.defaultModel || "",
     baseURL: baseURL || meta?.defaultBaseURL || "",
     apiKey,
+    credentialId,
     storageMode,
   });
 }
@@ -94,14 +97,21 @@ export function tryLoadApiKey(
   storageMode: ModelProviderConfig["apiKeyStorageMode"],
 ): string | null {
   if (provider === "mock") return "mock-no-key-needed";
+  if (storageMode === "hosted_encrypted") return null;
   const stored = loadApiKey(provider, storageMode);
   return stored?.apiKey ?? null;
 }
 
 export function validateConfig(config: ModelProviderConfig): AppProblem | null {
   if (config.provider === "mock") return null;
-  if (!config.apiKey) return configError("缺少 API Key");
-  if (config.provider === "openai_compatible" && !config.baseURL) return configError("OpenAI Compatible 模式需要提供 Base URL");
+  if (config.apiKeyStorageMode === "hosted_encrypted") {
+    if (!config.credentialId) return configError("请先在设置中心选择托管 API 凭据");
+  } else if (!config.apiKey) {
+    return configError("缺少 API Key");
+  }
+  if (config.provider === "openai_compatible" && !config.baseURL) {
+    return configError("OpenAI Compatible 模式需要提供 Base URL");
+  }
   if (!config.model) return configError("缺少 Model 名称");
   return null;
 }
@@ -109,6 +119,9 @@ export function validateConfig(config: ModelProviderConfig): AppProblem | null {
 export async function testProviderConnection(config: ModelProviderConfig): Promise<TestResult> {
   const validationError = validateConfig(config);
   if (validationError) return { ok: false, error: validationError };
+  if (config.apiKeyStorageMode === "hosted_encrypted" && config.credentialId) {
+    return testHostedCredential(config.credentialId);
+  }
   return getAdapter(config.provider).testConnection(config);
 }
 
@@ -120,10 +133,20 @@ export async function sendProviderRequest(
   if (isGuestOrDemo) return mockProvider.chat(config, messages);
   const validationError = validateConfig(config);
   if (validationError) throw validationError;
+  if (config.apiKeyStorageMode === "hosted_encrypted" && config.credentialId) {
+    return sendHostedProviderChat({
+      credential_id: config.credentialId,
+      provider_type: config.provider as Exclude<ProviderType, "mock">,
+      model: config.model,
+      messages,
+      temperature: config.temperature,
+      max_tokens: config.maxTokens,
+      stream: false,
+    });
+  }
   return getAdapter(config.provider).chat(config, messages);
 }
 
-// Phase 4: Streaming endpoint
 export function sendProviderStreamRequest(
   isGuestOrDemo: boolean,
   config: ModelProviderConfig,
@@ -133,10 +156,36 @@ export function sendProviderStreamRequest(
   if (isGuestOrDemo) return mockProvider.chatStream(config, messages, signal);
   const validationError = validateConfig(config);
   if (validationError) {
-    // Return an async iterator that throws the error
     return (async function* () {
       throw validationError;
     })();
   }
+
+  if (config.apiKeyStorageMode === "hosted_encrypted" && config.credentialId) {
+    return (async function* () {
+      const result = await sendHostedProviderChat({
+        credential_id: config.credentialId as string,
+        provider_type: config.provider as Exclude<ProviderType, "mock">,
+        model: config.model,
+        messages,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        stream: false,
+      });
+      yield {
+        content: result.content,
+        done: false,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      };
+      yield {
+        content: "",
+        done: true,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      };
+    })();
+  }
+
   return getAdapter(config.provider).chatStream(config, messages, signal);
 }

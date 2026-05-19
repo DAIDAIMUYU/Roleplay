@@ -16,12 +16,23 @@ import type { CharacterRow } from "../features/roleplay/types/database";
 import type { ChatMessage } from "../features/roleplay/providers/provider.types";
 import type { ProviderType, ApiKeyStorageMode } from "../features/roleplay/providers";
 import { loadApiKey } from "../features/roleplay/storage/apiKeyStorage";
+import { getDefaultHostedCredential, loadHostedCredentialSelection, saveHostedCredentialSelection, selectionFromCredential } from "../features/roleplay/services/hostedCredentialsService";
 
-function detectProviderConfig(): { provider: ProviderType; model: string; storageMode: ApiKeyStorageMode } {
+function detectProviderConfig(): { provider: ProviderType; model: string; storageMode: ApiKeyStorageMode; credentialId?: string | null; baseURL?: string } {
   const local = loadApiKey("deepseek", "local_device"); if (local) return { provider: "deepseek", model: local.model, storageMode: "local_device" };
   const session = loadApiKey("deepseek", "session_only"); if (session) return { provider: "deepseek", model: session.model, storageMode: "session_only" };
   const oaiLocal = loadApiKey("openai_compatible", "local_device"); if (oaiLocal) return { provider: "openai_compatible", model: oaiLocal.model, storageMode: "local_device" };
   const oaiSession = loadApiKey("openai_compatible", "session_only"); if (oaiSession) return { provider: "openai_compatible", model: oaiSession.model, storageMode: "session_only" };
+  const hosted = loadHostedCredentialSelection();
+  if (hosted) {
+    return {
+      provider: hosted.provider,
+      model: hosted.model,
+      storageMode: "hosted_encrypted",
+      credentialId: hosted.credentialId,
+      baseURL: hosted.baseURL,
+    };
+  }
   return { provider: "deepseek", model: "deepseek-chat", storageMode: "session_only" };
 }
 
@@ -29,8 +40,52 @@ export function ChatRoomPage() {
   const isMobile = useIsMobile();
   const { isGuestOrDemo, user } = useAuth();
   const userId = user?.id;
-  const { provider, model, storageMode } = detectProviderConfig();
-  const chat = useChatSession(isGuestOrDemo, userId, provider, model, storageMode);
+  const [providerConfig, setProviderConfig] = useState(detectProviderConfig);
+
+  useEffect(() => {
+    setProviderConfig(detectProviderConfig());
+  }, [userId]);
+
+  useEffect(() => {
+    if (isGuestOrDemo || !userId) return;
+    if (providerConfig.storageMode === "hosted_encrypted" && providerConfig.credentialId) return;
+    if (
+      loadApiKey("deepseek", "local_device") ||
+      loadApiKey("deepseek", "session_only") ||
+      loadApiKey("openai_compatible", "local_device") ||
+      loadApiKey("openai_compatible", "session_only")
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void getDefaultHostedCredential()
+      .then((credential) => {
+        if (!credential || cancelled) return;
+        const selection = selectionFromCredential(credential);
+        saveHostedCredentialSelection(selection);
+        setProviderConfig({
+          provider: selection.provider,
+          model: selection.model,
+          storageMode: "hosted_encrypted",
+          credentialId: selection.credentialId,
+          baseURL: selection.baseURL,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuestOrDemo, providerConfig.credentialId, providerConfig.storageMode, userId]);
+
+  const chat = useChatSession(
+    isGuestOrDemo,
+    userId,
+    providerConfig.provider,
+    providerConfig.model,
+    providerConfig.storageMode,
+    providerConfig.credentialId,
+    providerConfig.baseURL,
+  );
 
   const [inputValue, setInputValue] = useState("");
   const [showMobileSessions, setShowMobileSessions] = useState(false);

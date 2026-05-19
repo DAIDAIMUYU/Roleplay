@@ -740,6 +740,10 @@ export function parseBackupText(fileName: string, text: string): ImportPreview {
     throw new Error("备份文件缺少 data 区块。");
   }
 
+  if ("provider_credentials" in data || "provider_credential_secrets" in data) {
+    throw new Error("备份文件包含托管 API 凭据数据。出于安全考虑，不支持导入 provider credentials。");
+  }
+
   const payload: RoleplayBackupFile = {
     schema_version: typeof parsed.schema_version === "string" ? parsed.schema_version : "",
     app_name: typeof parsed.app_name === "string" ? parsed.app_name : "",
