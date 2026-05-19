@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../../auth/supabaseClient";
 import type { MemoryRow } from "../types/database";
 import * as Repo from "../repositories/roleplayRepository";
+import * as LocalRepo from "../repositories/localRoleplayRepository";
+import * as LocalMirror from "../repositories/localMirror";
 
 interface UseMemoriesReturn {
   memories: MemoryRow[];
@@ -36,10 +38,11 @@ export function useMemories(userId: string | undefined, isDemo: boolean): UseMem
   const [filterType, setFilterType] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (isDemo || !supabase || !userId) return;
     setLoading(true);
     try {
-      const rows = await Repo.listMemories(supabase, userId);
+      const rows = isDemo || !supabase || !userId
+        ? await LocalRepo.listMemories()
+        : await Repo.listMemories(supabase, userId);
       setMemories(rows);
     } catch { /* ignore */ } finally { setLoading(false); }
   }, [isDemo, userId]);
@@ -47,32 +50,50 @@ export function useMemories(userId: string | undefined, isDemo: boolean): UseMem
   useEffect(() => { refresh(); }, [refresh]);
 
   const create = useCallback(async (content: string, type: string, title?: string, salience?: number, sessionId?: string, characterId?: string) => {
-    if (isDemo || !supabase || !userId) return;
-    await Repo.createMemory(supabase, userId, {
-      content, memory_type: type as MemoryRow["memory_type"], title, salience: salience ?? 50, status: "active",
-      session_id: sessionId ?? undefined, character_id: characterId ?? undefined,
-    });
+    const payload = {
+      content,
+      memory_type: type as MemoryRow["memory_type"],
+      title,
+      salience: salience ?? 50,
+      status: "active" as const,
+      session_id: sessionId ?? undefined,
+      character_id: characterId ?? undefined,
+    };
+    if (isDemo || !supabase || !userId) await LocalRepo.createMemory(payload);
+    else {
+      const row = await Repo.createMemory(supabase, userId, payload);
+      if (row) LocalMirror.mirrorMemory(row);
+    }
     await refresh();
   }, [isDemo, userId, refresh]);
 
   const update = useCallback(async (id: string, content: string, type?: string, title?: string, salience?: number) => {
-    if (isDemo || !supabase || !userId) return;
-    await Repo.updateMemory(supabase, id, userId, {
-      content, memory_type: type as MemoryRow["memory_type"], title, salience,
-    });
+    const payload = { content, memory_type: type as MemoryRow["memory_type"], title, salience };
+    if (isDemo || !supabase || !userId) await LocalRepo.updateMemory(id, payload);
+    else {
+      const row = await Repo.updateMemory(supabase, id, userId, payload);
+      if (row) LocalMirror.mirrorMemory(row);
+    }
     await refresh();
   }, [isDemo, userId, refresh]);
 
   const remove = useCallback(async (id: string) => {
-    if (isDemo || !supabase || !userId) return;
-    await Repo.deleteMemory(supabase, id, userId);
+    if (isDemo || !supabase || !userId) await LocalRepo.deleteMemory(id);
+    else {
+      await Repo.deleteMemory(supabase, id, userId);
+      const mem = memories.find((m) => m.id === id);
+      if (mem) LocalMirror.mirrorMemory({ ...mem, status: "deleted", deleted_at: new Date().toISOString(), deleted_reason: "user_deleted", updated_at: new Date().toISOString() });
+    }
     await refresh();
   }, [isDemo, userId, refresh]);
 
   const toggleStatus = useCallback(async (id: string, current: string) => {
-    if (isDemo || !supabase || !userId) return;
     const newStatus = current === "active" ? "disabled" : "active";
-    await Repo.updateMemory(supabase, id, userId, { status: newStatus as MemoryRow["status"] });
+    if (isDemo || !supabase || !userId) await LocalRepo.updateMemory(id, { status: newStatus as MemoryRow["status"] });
+    else {
+      const row = await Repo.updateMemory(supabase, id, userId, { status: newStatus as MemoryRow["status"] });
+      if (row) LocalMirror.mirrorMemory(row);
+    }
     await refresh();
   }, [isDemo, userId, refresh]);
 

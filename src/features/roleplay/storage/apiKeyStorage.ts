@@ -52,7 +52,7 @@ export function saveApiKeyLocalDevice(
     localStorage.setItem(storageKey(provider), JSON.stringify(config));
   } catch (error) {
     console.error("本地保存 API Key 失败", error);
-    throw new Error("浏览器存储不可用，请尝试“仅本次会话”保存。");
+    throw new Error("浏览器本地存储不可用，请改用“仅本次会话”保存。");
   }
 }
 
@@ -112,11 +112,11 @@ export function getStorageModeLabel(mode: ApiKeyStorageMode): string {
 export function getStorageModeDescription(mode: ApiKeyStorageMode): string {
   switch (mode) {
     case "session_only":
-      return "关闭页面后失效，需要重新输入。";
+      return "API Key 仅保存在当前网页会话中。关闭页面或刷新后可能需要重新填写，不会上传云端。";
     case "local_device":
-      return "只保存在当前浏览器，不上传服务器。";
+      return "API Key 保存在当前浏览器本地，不会上传云端。清除浏览器网站数据或更换设备后需要重新配置。";
     case "hosted_encrypted":
-      return "服务端加密保存，前端不再持有明文，可在多设备使用。";
+      return "API Key 通过服务端加密后保存到云端凭据库。前端不会展示明文 Key，适合跨设备使用。";
   }
 }
 

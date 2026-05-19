@@ -25,11 +25,13 @@ import type { ContextBuildOutput } from "../../context/contextBuilder";
 import { estimateTokens } from "../../context/tokenBudget";
 import { supabase } from "../../../auth/supabaseClient";
 import * as Repo from "../../repositories/roleplayRepository";
+import * as LocalRepo from "../../repositories/localRoleplayRepository";
 
 interface ContextPreviewProps {
   sessionTitle: string;
   messageCount: number;
   isDemo: boolean;
+  isLocalMode: boolean;
   providerLabel: string;
   modelLabel: string;
   apiConfigured: boolean;
@@ -122,6 +124,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     sessionTitle,
     messageCount,
     isDemo,
+    isLocalMode,
     providerLabel,
     modelLabel,
     apiConfigured,
@@ -182,24 +185,35 @@ export function ContextPreview(props: ContextPreviewProps) {
   }, [sessionSummaryText]);
 
   const loadPickers = useCallback(async () => {
-    if (!supabase || !activeCharacter?.user_id) return;
-    const [templates, worldbooks, memories] = await Promise.all([
-      Repo.listPromptTemplates(supabase, activeCharacter.user_id),
-      Repo.listWorldbooks(supabase, activeCharacter.user_id),
-      Repo.listMemories(supabase, activeCharacter.user_id),
-    ]);
+    const [templates, worldbooks, memories] = await (isLocalMode
+      ? Promise.all([
+          LocalRepo.listPromptTemplates(),
+          LocalRepo.listWorldbooks(),
+          LocalRepo.listMemories(),
+        ])
+      : !supabase || !activeCharacter?.user_id
+        ? Promise.resolve([[] as PromptTemplateRow[], [] as WorldbookRow[], [] as MemoryRow[]])
+        : Promise.all([
+            Repo.listPromptTemplates(supabase, activeCharacter.user_id),
+            Repo.listWorldbooks(supabase, activeCharacter.user_id),
+            Repo.listMemories(supabase, activeCharacter.user_id),
+          ]));
     setPickerTpls(templates);
     setPickerWbs(worldbooks);
     setPickerMems(memories.filter((memory) => memory.status === "active"));
-  }, [activeCharacter?.user_id]);
+  }, [activeCharacter?.user_id, isLocalMode]);
 
   useEffect(() => {
-    if (!supabase || worldbookIds.length === 0) {
+    if (worldbookIds.length === 0) {
       setWbNames(new Map());
       return;
     }
-    const client = supabase;
-    Promise.all(worldbookIds.map((id) => Repo.getWorldbook(client, id).catch(() => null)))
+    const loader = isLocalMode
+      ? Promise.all(worldbookIds.map((id) => LocalRepo.getWorldbook(id).catch(() => null)))
+      : !supabase
+        ? Promise.resolve([])
+        : Promise.all(worldbookIds.map((id) => Repo.getWorldbook(supabase!, id).catch(() => null)));
+    loader
       .then((rows) => {
         const names = new Map<string, string>();
         rows.forEach((row) => {
@@ -208,14 +222,19 @@ export function ContextPreview(props: ContextPreviewProps) {
         setWbNames(names);
       })
       .catch(() => setWbNames(new Map()));
-  }, [worldbookIds]);
+  }, [isLocalMode, worldbookIds]);
 
   useEffect(() => {
-    if (!supabase || !activeCharacter?.user_id || memoryIds.length === 0) {
+    if (memoryIds.length === 0) {
       setMemInfos(new Map());
       return;
     }
-    Repo.listMemories(supabase, activeCharacter.user_id)
+    const loader = isLocalMode
+      ? LocalRepo.listMemories()
+      : !supabase || !activeCharacter?.user_id
+        ? Promise.resolve([])
+        : Repo.listMemories(supabase, activeCharacter.user_id);
+    loader
       .then((rows) => {
         const infos = new Map<string, MemoryRow>();
         rows.forEach((row) => {
@@ -224,7 +243,7 @@ export function ContextPreview(props: ContextPreviewProps) {
         setMemInfos(infos);
       })
       .catch(() => setMemInfos(new Map()));
-  }, [activeCharacter?.user_id, memoryIds]);
+  }, [activeCharacter?.user_id, isLocalMode, memoryIds]);
 
   const statusRows = [
     { label: "会话", value: sessionTitle || "未选择", icon: <Cpu className="h-4 w-4" /> },
@@ -232,7 +251,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     { label: "Provider", value: providerLabel, icon: <Cpu className="h-4 w-4" /> },
     { label: "模型", value: modelLabel, icon: <Zap className="h-4 w-4" /> },
     { label: "运行", value: runtimeMode, icon: <Cpu className="h-4 w-4" /> },
-    { label: "API", value: isDemo ? "Mock" : apiConfigured ? "已配置" : "未配置", icon: apiConfigured ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" /> },
+    { label: "API", value: isDemo ? "本地预览" : apiConfigured ? "已配置" : "未配置", icon: apiConfigured ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" /> },
   ];
 
   return (

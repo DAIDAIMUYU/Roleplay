@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "../../auth/supabaseClient";
 import type { PromptTemplateRow } from "../types/database";
 import * as Repo from "../repositories/roleplayRepository";
+import * as LocalRepo from "../repositories/localRoleplayRepository";
+import * as LocalMirror from "../repositories/localMirror";
 
 const CATEGORIES = [
   { value: "general", label: "通用角色扮演" },
@@ -41,10 +43,11 @@ export function useTemplates(userId: string | undefined, isDemo: boolean): UseTe
   const [filterTag, setFilterTag] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (isDemo || !supabase || !userId) return;
     setLoading(true);
     try {
-      const rows = await Repo.listPromptTemplates(supabase, userId);
+      const rows = isDemo || !supabase || !userId
+        ? await LocalRepo.listPromptTemplates()
+        : await Repo.listPromptTemplates(supabase, userId);
       setTemplates(rows);
     } catch (e) {
       setError(String(e));
@@ -59,12 +62,15 @@ export function useTemplates(userId: string | undefined, isDemo: boolean): UseTe
     title: string, content: string,
     category?: string, tags?: string[], description?: string,
   ) => {
-    if (isDemo || !supabase || !userId) return null;
     try {
-      const row = await Repo.createPromptTemplate(supabase, userId, {
-        title, content, category: category ?? "general", tags: tags ?? [], description,
-      });
-      if (row) setTemplates((prev) => [row, ...prev]);
+      const payload = { title, content, category: category ?? "general", tags: tags ?? [], description };
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.createPromptTemplate(payload)
+        : await Repo.createPromptTemplate(supabase, userId, payload);
+      if (row) {
+        setTemplates((prev) => [row, ...prev]);
+        if (!isDemo && supabase && userId) LocalMirror.mirrorTemplate(row);
+      }
       return row;
     } catch (e) {
       setError(String(e));
@@ -76,12 +82,15 @@ export function useTemplates(userId: string | undefined, isDemo: boolean): UseTe
     id: string, title: string, content: string,
     category?: string, tags?: string[], description?: string,
   ) => {
-    if (isDemo || !supabase || !userId) return null;
     try {
-      const row = await Repo.updatePromptTemplate(supabase, id, {
-        title, content, category: category ?? "general", tags: tags ?? [], description,
-      });
-      if (row) setTemplates((prev) => prev.map((t) => (t.id === id ? row : t)));
+      const payload = { title, content, category: category ?? "general", tags: tags ?? [], description };
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.updatePromptTemplate(id, payload)
+        : await Repo.updatePromptTemplate(supabase, id, payload);
+      if (row) {
+        setTemplates((prev) => prev.map((t) => (t.id === id ? row : t)));
+        if (!isDemo && supabase && userId) LocalMirror.mirrorTemplate(row);
+      }
       return row;
     } catch (e) {
       setError(String(e));
@@ -90,9 +99,13 @@ export function useTemplates(userId: string | undefined, isDemo: boolean): UseTe
   }, [isDemo, userId]);
 
   const remove = useCallback(async (id: string) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      await Repo.deletePromptTemplate(supabase, id);
+      if (isDemo || !supabase || !userId) await LocalRepo.deletePromptTemplate(id);
+      else {
+        await Repo.deletePromptTemplate(supabase, id);
+        const tpl = templates.find((t) => t.id === id);
+        if (tpl) LocalMirror.mirrorTemplate({ ...tpl, deleted_at: new Date().toISOString(), deleted_reason: "user_deleted", updated_at: new Date().toISOString() });
+      }
       setTemplates((prev) => prev.filter((t) => t.id !== id));
     } catch (e) {
       setError(String(e));
@@ -100,10 +113,14 @@ export function useTemplates(userId: string | undefined, isDemo: boolean): UseTe
   }, [isDemo, userId]);
 
   const toggleFavorite = useCallback(async (id: string, current: boolean) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      const row = await Repo.updatePromptTemplate(supabase, id, { is_favorite: !current });
-      if (row) setTemplates((prev) => prev.map((t) => (t.id === id ? row : t)));
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.updatePromptTemplate(id, { is_favorite: !current })
+        : await Repo.updatePromptTemplate(supabase, id, { is_favorite: !current });
+      if (row) {
+        setTemplates((prev) => prev.map((t) => (t.id === id ? row : t)));
+        if (!isDemo && supabase && userId) LocalMirror.mirrorTemplate(row);
+      }
     } catch (e) {
       setError(String(e));
     }

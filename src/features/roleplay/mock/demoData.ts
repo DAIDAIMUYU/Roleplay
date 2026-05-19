@@ -9,6 +9,7 @@ export interface DemoSession {
 }
 
 let idCounter = 1;
+
 function uid(): string {
   return `demo_${Date.now()}_${idCounter++}`;
 }
@@ -16,13 +17,13 @@ function uid(): string {
 const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   content:
-    "[Demo Mock] 欢迎来到角色酒馆 Demo 体验！我是模拟 AI，不调用真实模型，不消耗任何 API。你可以输入任意内容，我会返回演示回复。登录并配置自己的 API Key 后可以开始真实角色扮演。",
+    "[本地预览] 欢迎来到角色酒馆的网页本地模式预览。当前未登录状态下，你可以先体验界面与对话流程。真实 AI 调用仍需要你配置自己的 API 凭据；登录只是为了开启云端同步和多设备互通。",
 };
 
 export function createDemoSession(title?: string): DemoSession {
   return {
     id: uid(),
-    title: title || `Demo 会话 ${idCounter}`,
+    title: title || `本地预览会话 ${idCounter}`,
     mode: "demo_mock",
     lastMessageAt: new Date().toISOString(),
     messages: [WELCOME_MESSAGE],
@@ -32,7 +33,7 @@ export function createDemoSession(title?: string): DemoSession {
 export function getDefaultDemoSession(): DemoSession {
   return {
     id: "demo_default_1",
-    title: "Demo 体验会话",
+    title: "本地预览会话",
     mode: "demo_mock",
     lastMessageAt: new Date().toISOString(),
     messages: [WELCOME_MESSAGE],

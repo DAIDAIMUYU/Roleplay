@@ -1,5 +1,3 @@
-// Provider type system — Phase 3-4
-
 export type ProviderType = "mock" | "deepseek" | "openai_compatible";
 
 export type ApiKeyStorageMode =
@@ -50,8 +48,8 @@ export interface ProviderMeta {
 export const AVAILABLE_PROVIDERS: ProviderMeta[] = [
   {
     id: "mock",
-    label: "Mock (Demo)",
-    description: "模拟回复，不调用真实 AI，不消耗任何 API",
+    label: "本地预览",
+    description: "用于网页本地模式的预览回复，不调用真实模型，也不会消耗真实 API。",
     defaultBaseURL: "",
     defaultModel: "mock",
     requiresBaseURL: false,
@@ -60,7 +58,7 @@ export const AVAILABLE_PROVIDERS: ProviderMeta[] = [
   {
     id: "deepseek",
     label: "DeepSeek",
-    description: "使用你自己的 DeepSeek API Key",
+    description: "使用你自己的 DeepSeek API Key。",
     defaultBaseURL: "https://api.deepseek.com/v1",
     defaultModel: "deepseek-chat",
     requiresBaseURL: false,
@@ -69,15 +67,13 @@ export const AVAILABLE_PROVIDERS: ProviderMeta[] = [
   {
     id: "openai_compatible",
     label: "OpenAI Compatible",
-    description: "兼容 OpenAI API 格式的服务商",
+    description: "兼容 OpenAI API 格式的服务商。",
     defaultBaseURL: "",
     defaultModel: "",
     requiresBaseURL: true,
     enabled: true,
   },
 ];
-
-// Error types
 
 export interface AppProblem {
   type: string;
@@ -107,16 +103,12 @@ export interface ChatResult {
   outputTokens?: number;
 }
 
-// Phase 4: Streaming
-
 export interface ChatStreamChunk {
   content: string;
   done: boolean;
   inputTokens?: number;
   outputTokens?: number;
 }
-
-// Provider Adapter interface
 
 export interface ProviderAdapter {
   readonly id: ProviderType;

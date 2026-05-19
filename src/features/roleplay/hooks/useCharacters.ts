@@ -3,6 +3,8 @@ import { supabase } from "../../auth/supabaseClient";
 import type { CharacterRow } from "../types/database";
 import { packCharacterCard, type CharacterCardData } from "../utils/characterPrompt";
 import * as Repo from "../repositories/roleplayRepository";
+import * as LocalRepo from "../repositories/localRoleplayRepository";
+import * as LocalMirror from "../repositories/localMirror";
 
 interface UseCharactersReturn {
   characters: CharacterRow[];
@@ -29,10 +31,11 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   const [filterTag, setFilterTag] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (isDemo || !supabase || !userId) return;
     setLoading(true);
     try {
-      const rows = await Repo.listActiveCharacters(supabase, userId);
+      const rows = isDemo || !supabase || !userId
+        ? await LocalRepo.listActiveCharacters()
+        : await Repo.listActiveCharacters(supabase, userId);
       setCharacters(rows);
     } catch (e) {
       setError(String(e));
@@ -44,14 +47,15 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   useEffect(() => { refresh(); }, [refresh]);
 
   const create = useCallback(async (name: string, card: CharacterCardData, tags?: string[]) => {
-    if (isDemo || !supabase || !userId) return null;
     try {
-      const row = await Repo.createCharacter(supabase, userId, {
-        name,
-        card_json: packCharacterCard(card),
-        tags: tags ?? [],
-      });
-      if (row) setCharacters((prev) => [row, ...prev]);
+      const payload = { name, card_json: packCharacterCard(card), tags: tags ?? [] };
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.createCharacter(payload)
+        : await Repo.createCharacter(supabase, userId, payload);
+      if (row) {
+        setCharacters((prev) => [row, ...prev]);
+        if (!isDemo && supabase && userId) LocalMirror.mirrorCharacter(row);
+      }
       return row;
     } catch (e) {
       setError(String(e));
@@ -60,14 +64,15 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   }, [isDemo, userId]);
 
   const update = useCallback(async (id: string, name: string, card: CharacterCardData, tags?: string[]) => {
-    if (isDemo || !supabase || !userId) return null;
     try {
-      const row = await Repo.updateCharacter(supabase, id, userId, {
-        name,
-        card_json: packCharacterCard(card),
-        tags: tags ?? [],
-      });
-      if (row) setCharacters((prev) => prev.map((c) => (c.id === id ? row : c)));
+      const payload = { name, card_json: packCharacterCard(card), tags: tags ?? [] };
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.updateCharacter(id, payload)
+        : await Repo.updateCharacter(supabase, id, userId, payload);
+      if (row) {
+        setCharacters((prev) => prev.map((c) => (c.id === id ? row : c)));
+        if (!isDemo && supabase && userId) LocalMirror.mirrorCharacter(row);
+      }
       return row;
     } catch (e) {
       setError(String(e));
@@ -76,9 +81,14 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   }, [isDemo, userId]);
 
   const remove = useCallback(async (id: string) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      await Repo.deleteCharacter(supabase, id, userId);
+      if (isDemo || !supabase || !userId) await LocalRepo.deleteCharacter(id);
+      else {
+        await Repo.deleteCharacter(supabase, id, userId);
+        // Mirror soft-delete: fetch current row, apply deleted_at, write locally
+        const char = characters.find((c) => c.id === id);
+        if (char) LocalMirror.mirrorCharacter({ ...char, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      }
       setCharacters((prev) => prev.filter((c) => c.id !== id));
     } catch (e) {
       setError(String(e));
@@ -86,9 +96,13 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   }, [isDemo, userId]);
 
   const archive = useCallback(async (id: string) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      await Repo.archiveCharacter(supabase, id, userId);
+      if (isDemo || !supabase || !userId) await LocalRepo.archiveCharacter(id);
+      else {
+        await Repo.archiveCharacter(supabase, id, userId);
+        const char = characters.find((c) => c.id === id);
+        if (char) LocalMirror.mirrorCharacter({ ...char, archived_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      }
       setCharacters((prev) => prev.map((c) => (c.id === id ? { ...c, archived_at: new Date().toISOString() } : c)));
     } catch (e) {
       setError(String(e));
@@ -96,10 +110,14 @@ export function useCharacters(userId: string | undefined, isDemo: boolean): UseC
   }, [isDemo, userId]);
 
   const toggleFavorite = useCallback(async (id: string, current: boolean) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      const row = await Repo.updateCharacter(supabase, id, userId, { is_favorite: !current });
-      if (row) setCharacters((prev) => prev.map((c) => (c.id === id ? row : c)));
+      const row = isDemo || !supabase || !userId
+        ? await LocalRepo.updateCharacter(id, { is_favorite: !current })
+        : await Repo.updateCharacter(supabase, id, userId, { is_favorite: !current });
+      if (row) {
+        setCharacters((prev) => prev.map((c) => (c.id === id ? row : c)));
+        if (!isDemo && supabase && userId) LocalMirror.mirrorCharacter(row);
+      }
     } catch (e) {
       setError(String(e));
     }

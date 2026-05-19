@@ -13,6 +13,7 @@ import { ModeBadge } from "../shared/components/ModeBadge";
 import { EmptyState } from "../shared/components/EmptyState";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
 import * as Repo from "../features/roleplay/repositories/roleplayRepository";
+import * as LocalRepo from "../features/roleplay/repositories/localRoleplayRepository";
 import type { CharacterRow } from "../features/roleplay/types/database";
 import type { ChatMessage } from "../features/roleplay/providers/provider.types";
 import type { ApiKeyStorageMode, ProviderType } from "../features/roleplay/providers";
@@ -209,16 +210,13 @@ export function ChatRoomPage() {
   const [userScrolledUp, setUserScrolledUp] = useState(false);
 
   const loadPickerChars = useCallback(async () => {
-    if (!supabase || !userId) return;
-    const chars = await Repo.listActiveCharacters(supabase, userId);
+    const chars = isGuestOrDemo || !supabase || !userId
+      ? await LocalRepo.listActiveCharacters()
+      : await Repo.listActiveCharacters(supabase, userId);
     setPickerChars(chars);
-  }, [userId]);
+  }, [isGuestOrDemo, userId]);
 
   function handleCreateSession() {
-    if (isGuestOrDemo || !supabase) {
-      void chat.createSession();
-      return;
-    }
     void loadPickerChars();
     setShowPicker(true);
   }
@@ -305,6 +303,7 @@ export function ChatRoomPage() {
     modelLabel: chat.modelLabel,
     apiConfigured: chat.apiConfigured,
     runtimeMode: chat.runtimeMode,
+    isLocalMode: isGuestOrDemo,
     activeCharacter: chat.activeCharacter,
     activeTemplate: chat.activeTemplate,
     systemPrompt: chat.systemPrompt,
@@ -387,7 +386,7 @@ export function ChatRoomPage() {
         <EmptyState
           icon={<MessageCircle className="h-10 w-10" />}
           title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"}
-          description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "Demo 模式使用 Mock AI" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先配置 API Key"}
+          description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "网页本地模式使用本地预览回复" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先配置 API Key"}
         />
       ) : (
         chat.messages.map((message, index) => renderMessageBubble(message, index))

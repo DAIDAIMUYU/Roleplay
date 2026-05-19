@@ -170,14 +170,14 @@ export function DataManagementPage() {
             </Link>
             <div>
               <h1 className="text-xl font-bold text-ink-900">数据管理</h1>
-              <p className="text-sm text-ink-400 mt-1">登录后才能导出、导入和恢复自己的创作数据。</p>
+              <p className="text-sm text-ink-400 mt-1">登录后才能管理云端数据；本地模式下的浏览器数据仍建议你定期单独备份。</p>
             </div>
           </div>
           <ModeBadge />
         </div>
         <div className="card">
           <p className="text-sm text-ink-500 leading-relaxed">
-            当前是 Demo / 未登录状态。数据管理功能只对当前登录用户自己的 Supabase 数据生效，不会读取浏览器里的 API Key。
+            当前是网页本地模式 / 未登录状态。这里的云端数据管理功能只对当前登录用户自己的 Supabase 数据生效，也不会读取浏览器里的 API Key。
           </p>
         </div>
       </div>

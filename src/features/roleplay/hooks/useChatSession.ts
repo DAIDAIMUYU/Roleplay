@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../auth/supabaseClient";
 import type { ApiKeyStorageMode, ChatMessage, ModelProviderConfig, ProviderType } from "../providers/provider.types";
 import { DEFAULT_PROVIDER_CONFIG } from "../providers/provider.types";
 import { buildConfigFromStorage, sendProviderStreamRequest } from "../providers/providerGateway";
 import { loadApiKey } from "../storage/apiKeyStorage";
 import * as Repo from "../repositories/roleplayRepository";
-import { createDemoSession, getDefaultDemoSession } from "../mock/demoData";
+import * as LocalRepo from "../repositories/localRoleplayRepository";
+import * as LocalMirror from "../repositories/localMirror";
 import type { CharacterRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
 import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
@@ -323,15 +324,17 @@ export function useChatSession(
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const isDemo = isGuestOrDemo || !supabase;
+  const isLocalMode = isGuestOrDemo || !supabase || !userId;
 
   const getApiKey = useCallback((): string | null => {
-    if (isDemo) return "mock-no-key-needed";
     if (storageMode === "hosted_encrypted") return null;
     return loadApiKey(storedProvider, storageMode)?.apiKey ?? null;
-  }, [isDemo, storedProvider, storageMode]);
+  }, [storedProvider, storageMode]);
 
-  const apiConfigured = !isDemo && (storageMode === "hosted_encrypted" ? !!hostedCredentialId : getApiKey() !== null);
+  const apiConfigured = storageMode === "hosted_encrypted"
+    ? !isLocalMode && !!hostedCredentialId
+    : getApiKey() !== null;
+  const isDemo = isLocalMode && !apiConfigured;
 
   const buildConfig = useCallback((): ModelProviderConfig => {
     return buildConfigFromStorage(
@@ -357,7 +360,7 @@ export function useChatSession(
   }, [storedModel, storedProvider]);
 
   const syncMeta = useCallback(async (updates: Partial<SessionMeta>) => {
-    if (isDemo || !supabase || !userId || !stateRef.current.activeSessionId) return;
+    if (!stateRef.current.activeSessionId) return;
     const s = stateRef.current;
     const activeSessionId = s.activeSessionId;
     if (!activeSessionId) return;
@@ -371,37 +374,35 @@ export function useChatSession(
       _summary_enabled: s.summaryEnabled,
       ...updates,
     };
-    await Repo.updateSession(supabase, activeSessionId, userId, { system_prompt: JSON.stringify(merged) }).catch(() => {});
-  }, [isDemo, userId]);
+    if (isLocalMode) {
+      await LocalRepo.updateSession(activeSessionId, { system_prompt: JSON.stringify(merged) }).catch(() => {});
+      return;
+    }
+    const updated = await Repo.updateSession(supabase!, activeSessionId, userId!, { system_prompt: JSON.stringify(merged) }).catch(() => null);
+    if (updated) LocalMirror.mirrorSession(updated);
+  }, [isLocalMode, userId]);
 
   const refreshSuggestedMemories = useCallback(async (sessionId?: string | null) => {
-    if (isDemo || !supabase || !userId) return;
     try {
-      const rows = await Repo.listMemoriesByStatus(supabase, userId, ["suggested"], sessionId ?? undefined);
+      const rows = isLocalMode
+        ? await LocalRepo.listMemoriesByStatus(["suggested"], sessionId ?? undefined)
+        : await Repo.listMemoriesByStatus(supabase!, userId!, ["suggested"], sessionId ?? undefined);
       setState((s) => ({ ...s, suggestedMemories: rows }));
     } catch (error) {
       console.warn("[Chat] suggested memories load failed:", error);
     }
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const loadSessions = useCallback(async () => {
-    if (isDemo) {
-      const demo = getDefaultDemoSession();
-      setState((s) => ({
-        ...s,
-        sessions: [{ id: demo.id, title: demo.title, mode: "demo_mock", lastMessageAt: demo.lastMessageAt, characterId: null, characterName: null, characterEmoji: null }],
-        activeSessionId: s.activeSessionId || demo.id,
-        messages: s.activeSessionId ? s.messages : demo.messages,
-      }));
-      return;
-    }
-    if (!supabase || !userId) return;
-
-    const rows = await Repo.listSessions(supabase, userId);
+    const rows = isLocalMode ? await LocalRepo.listSessions() : await Repo.listSessions(supabase!, userId!);
     const sessionIds = rows.map((row) => row.id);
-    const participants = await Repo.listSessionParticipantsForSessions(supabase, sessionIds);
+    const participants = isLocalMode
+      ? await LocalRepo.listSessionParticipantsForSessions(sessionIds)
+      : await Repo.listSessionParticipantsForSessions(supabase!, sessionIds);
     const characterIds = unique(participants.filter((p) => p.participant_type === "character" && p.character_id).map((p) => p.character_id as string));
-    const characters = await Repo.listCharactersByIds(supabase, characterIds);
+    const characters = isLocalMode
+      ? await LocalRepo.listCharactersByIds(characterIds)
+      : await Repo.listCharactersByIds(supabase!, characterIds);
     const characterById = new Map(characters.map((character) => [character.id, character]));
 
     const sessions: SessionLike[] = rows.map((row) => {
@@ -448,22 +449,29 @@ export function useChatSession(
         suggestedMemories: activeSessionId ? s.suggestedMemories : [],
       };
     });
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const buildCurrentContext = useCallback(async (userMessage: string, messagesOverride?: ChatMessage[]): Promise<BuiltContext> => {
     const s = stateRef.current;
-    if (isDemo || !supabase || !userId || !s.activeSessionId) {
+    if (!s.activeSessionId) {
       return { output: null, session: null, character: s.activeCharacter, template: s.activeTemplate };
     }
 
     const sessionId = s.activeSessionId;
     const [session, participants, allEntries, allMems] = await withTimeout(
-      Promise.all([
-        Repo.getSession(supabase, sessionId),
-        Repo.listSessionParticipants(supabase, sessionId),
-        Repo.listAllWorldbookEntries(supabase, userId),
-        Repo.listAllActiveMemories(supabase, userId),
-      ]),
+      isLocalMode
+        ? Promise.all([
+            LocalRepo.getSession(sessionId),
+            LocalRepo.listSessionParticipants(sessionId),
+            LocalRepo.listAllWorldbookEntries(),
+            LocalRepo.listAllActiveMemories(),
+          ])
+        : Promise.all([
+            Repo.getSession(supabase!, sessionId),
+            Repo.listSessionParticipants(supabase!, sessionId),
+            Repo.listAllWorldbookEntries(supabase!, userId!),
+            Repo.listAllActiveMemories(supabase!, userId!),
+          ]),
       5000,
       "context data load timed out",
     );
@@ -472,10 +480,15 @@ export function useChatSession(
     const participant = participants.find((p) => p.participant_type === "character" && p.character_id);
     const characterId = participant?.character_id ?? session?.primary_character_id ?? null;
     const [character, template] = await withTimeout(
-      Promise.all([
-        characterId ? Repo.getCharacter(supabase, characterId).catch(() => null) : Promise.resolve(null),
-        meta._template_id ? Repo.getPromptTemplate(supabase, meta._template_id).catch(() => null) : Promise.resolve(s.activeTemplate),
-      ]),
+      isLocalMode
+        ? Promise.all([
+            characterId ? LocalRepo.getCharacter(characterId).catch(() => null) : Promise.resolve(null),
+            meta._template_id ? LocalRepo.getPromptTemplate(meta._template_id).catch(() => null) : Promise.resolve(s.activeTemplate),
+          ])
+        : Promise.all([
+            characterId ? Repo.getCharacter(supabase!, characterId).catch(() => null) : Promise.resolve(null),
+            meta._template_id ? Repo.getPromptTemplate(supabase!, meta._template_id).catch(() => null) : Promise.resolve(s.activeTemplate),
+          ]),
       5000,
       "context character load timed out",
     );
@@ -488,7 +501,9 @@ export function useChatSession(
     const recentMessageRows = messagesOverride
       ? null
       : await withTimeout(
-          Repo.listRecentMessagesForContext(supabase, sessionId, s.activeBranchId, CONTEXT_MESSAGE_LIMIT),
+          isLocalMode
+            ? LocalRepo.listRecentMessagesForContext(sessionId, s.activeBranchId, CONTEXT_MESSAGE_LIMIT)
+            : Repo.listRecentMessagesForContext(supabase!, sessionId, s.activeBranchId, CONTEXT_MESSAGE_LIMIT),
           5000,
           "context message load timed out",
         );
@@ -507,46 +522,30 @@ export function useChatSession(
     });
 
     return { output, session, character, template };
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const createSession = useCallback(async (characterId?: string) => {
-    if (isDemo) {
-      const demo = createDemoSession();
-      loadedSessionRef.current = demo.id;
-      setState((s) => ({
-        ...s,
-        sessions: [{ id: demo.id, title: demo.title, mode: "demo_mock", lastMessageAt: demo.lastMessageAt, characterId: null, characterName: null, characterEmoji: null }, ...s.sessions],
-        activeSessionId: demo.id,
-        activeCharacter: null,
-        activeTemplate: null,
-        messages: demo.messages,
-        lastContextOutput: null,
-        contextPreviewError: null,
-        activeBranchId: null,
-        activeBranchName: null,
-        contextRunSaveStatus: null,
-        messageDbIds: new Map(),
-        messageCreatedAts: new Map(),
-        messageRevisions: new Map(),
-        messageRevisionCounts: new Map(),
-        editedIndices: new Set(),
-        hasMoreMessages: false,
-        isLoadingOlderMessages: false,
-        suggestedMemories: [],
-      }));
-      return;
-    }
-    if (!supabase || !userId) return;
-
     setState((s) => ({ ...s, isContextLoading: true, error: null }));
     try {
-      const character = characterId ? await Repo.getCharacter(supabase, characterId) : null;
+      const character = characterId
+        ? (isLocalMode ? await LocalRepo.getCharacter(characterId) : await Repo.getCharacter(supabase!, characterId))
+        : null;
       const title = character ? `${character.name} - new chat` : `New chat ${new Date().toLocaleTimeString("zh-CN")}`;
-      const row = await Repo.createSession(supabase, userId, { title, primary_character_id: characterId ?? undefined, system_prompt: buildSessionMeta({ _meta_version: SESSION_META_VERSION }) });
+      const row = isLocalMode
+        ? await LocalRepo.createSession({ title, primary_character_id: characterId ?? undefined, system_prompt: buildSessionMeta({ _meta_version: SESSION_META_VERSION }) })
+        : await Repo.createSession(supabase!, userId!, { title, primary_character_id: characterId ?? undefined, system_prompt: buildSessionMeta({ _meta_version: SESSION_META_VERSION }) });
       if (!row) throw new Error("create session failed");
-      if (characterId) await Repo.ensureSessionParticipant(supabase, userId, row.id, characterId).catch(() => {});
+      if (!isLocalMode && row) LocalMirror.mirrorSession(row);
+      if (characterId) {
+        await (isLocalMode
+          ? LocalRepo.ensureSessionParticipant(row.id, characterId)
+          : Repo.ensureSessionParticipant(supabase!, userId!, row.id, characterId)).catch(() => {});
+      }
 
-      const branch = await Repo.ensureDefaultBranch(supabase, row.id, userId);
+      const branch = isLocalMode
+        ? await LocalRepo.ensureDefaultBranch(row.id)
+        : await Repo.ensureDefaultBranch(supabase!, row.id, userId!);
+      if (!isLocalMode && branch) LocalMirror.mirrorBranch(branch);
       const branchId = branch?.id;
       const branchName = branch?.title || branch?.name || "主线";
 
@@ -557,7 +556,10 @@ export function useChatSession(
       if (character && greeting) {
         messages.push({ role: "assistant", content: greeting });
         if (branchId) {
-          const saved = await Repo.createMessage(supabase, userId, { session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId });
+          const saved = isLocalMode
+            ? await LocalRepo.createMessage({ session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId })
+            : await Repo.createMessage(supabase!, userId!, { session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId });
+          if (!isLocalMode && saved) LocalMirror.mirrorMessage(saved);
           if (saved) {
             dbIdMap.set(0, saved.id);
             createdAtMap.set(0, saved.created_at);
@@ -598,43 +600,23 @@ export function useChatSession(
     } catch (error) {
       setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
     }
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const selectSession = useCallback(async (id: string) => {
-    if (isDemo) {
-      const demo = getDefaultDemoSession();
-      loadedSessionRef.current = id;
-      setState((s) => ({
-        ...s,
-        activeSessionId: id,
-        messages: demo.messages,
-        activeCharacter: null,
-        activeTemplate: null,
-        isContextLoading: false,
-        activeBranchId: null,
-        activeBranchName: null,
-        contextRunSaveStatus: null,
-        messageDbIds: new Map(),
-        messageCreatedAts: new Map(),
-        messageRevisions: new Map(),
-        messageRevisionCounts: new Map(),
-        editedIndices: new Set(),
-        hasMoreMessages: false,
-        isLoadingOlderMessages: false,
-        suggestedMemories: [],
-      }));
-      return;
-    }
-    if (!supabase) return;
-
     setState((s) => ({ ...s, activeSessionId: id, error: null, isContextLoading: true, lastContextOutput: null, contextPreviewError: null }));
     try {
       const [session, participants, branch] = await withTimeout(
-        Promise.all([
-          Repo.getSession(supabase, id),
-          Repo.listSessionParticipants(supabase, id),
-          Repo.ensureDefaultBranch(supabase, id, userId!),
-        ]),
+        isLocalMode
+          ? Promise.all([
+              LocalRepo.getSession(id),
+              LocalRepo.listSessionParticipants(id),
+              LocalRepo.ensureDefaultBranch(id),
+            ])
+          : Promise.all([
+              Repo.getSession(supabase!, id),
+              Repo.listSessionParticipants(supabase!, id),
+              Repo.ensureDefaultBranch(supabase!, id, userId!),
+            ]),
         5000,
         "session load timed out",
       );
@@ -642,21 +624,30 @@ export function useChatSession(
       const characterId = participant?.character_id ?? session?.primary_character_id ?? null;
       const meta = parseSessionMeta(session?.system_prompt ?? null);
       const [character, template] = await withTimeout(
-        Promise.all([
-          characterId ? Repo.getCharacter(supabase, characterId).catch(() => null) : Promise.resolve(null),
-          meta._template_id ? Repo.getPromptTemplate(supabase, meta._template_id).catch(() => null) : Promise.resolve(null),
-        ]),
+        isLocalMode
+          ? Promise.all([
+              characterId ? LocalRepo.getCharacter(characterId).catch(() => null) : Promise.resolve(null),
+              meta._template_id ? LocalRepo.getPromptTemplate(meta._template_id).catch(() => null) : Promise.resolve(null),
+            ])
+          : Promise.all([
+              characterId ? Repo.getCharacter(supabase!, characterId).catch(() => null) : Promise.resolve(null),
+              meta._template_id ? Repo.getPromptTemplate(supabase!, meta._template_id).catch(() => null) : Promise.resolve(null),
+            ]),
         5000,
         "session character load timed out",
       );
 
       const page = await withTimeout(
-        Repo.listMessagesPage(supabase, id, branch?.id ?? null, UI_MESSAGE_PAGE_SIZE),
+        isLocalMode
+          ? LocalRepo.listMessagesPage(id, branch?.id ?? null, UI_MESSAGE_PAGE_SIZE)
+          : Repo.listMessagesPage(supabase!, id, branch?.id ?? null, UI_MESSAGE_PAGE_SIZE),
         5000,
         "message page load timed out",
       );
       const revisionCounts = await withTimeout(
-        Repo.getMessageRevisionCounts(supabase, page.rows.map((row) => row.id)).catch((error) => {
+        (isLocalMode
+          ? LocalRepo.getMessageRevisionCounts(page.rows.map((row) => row.id))
+          : Repo.getMessageRevisionCounts(supabase!, page.rows.map((row) => row.id))).catch((error) => {
           console.warn("[Chat] message revision count load failed:", error);
           return new Map<string, number>();
         }),
@@ -698,41 +689,18 @@ export function useChatSession(
       loadedSessionRef.current = id;
       setState((s) => ({ ...s, error: String(error), isContextLoading: false, contextPreviewError: "Context preview failed, chat is still available" }));
     }
-  }, [isDemo, refreshSuggestedMemories, userId]);
+  }, [isLocalMode, refreshSuggestedMemories, userId]);
 
   const deleteSession = useCallback(async (id: string) => {
-    if (isDemo) {
-      setState((s) => {
-        const sessions = s.sessions.filter((session) => session.id !== id);
-        const deletingActive = s.activeSessionId === id;
-        return deletingActive
-          ? {
-              ...s,
-              sessions,
-              activeSessionId: sessions[0]?.id ?? null,
-              messages: [],
-              activeCharacter: null,
-              activeTemplate: null,
-              lastContextOutput: null,
-              activeBranchId: null,
-              activeBranchName: null,
-              contextRunSaveStatus: null,
-              messageDbIds: new Map(),
-              messageCreatedAts: new Map(),
-              messageRevisions: new Map(),
-              messageRevisionCounts: new Map(),
-              editedIndices: new Set(),
-              hasMoreMessages: false,
-              isLoadingOlderMessages: false,
-              suggestedMemories: [],
-            }
-          : { ...s, sessions };
-      });
-      return;
-    }
-    if (!supabase || !userId) return;
     try {
-      await Repo.deleteSession(supabase, id, userId);
+      if (isLocalMode) await LocalRepo.deleteSession(id);
+      else {
+        await Repo.deleteSession(supabase!, id, userId!);
+        // Re-fetch from cloud to get the full row with deleted_at, mirror it
+        Repo.getSession(supabase!, id).then((deleted) => {
+          if (deleted) LocalMirror.mirrorSession(deleted);
+        }).catch(() => {});
+      }
       setState((s) => {
         const sessions = s.sessions.filter((session) => session.id !== id);
         const deletingActive = s.activeSessionId === id;
@@ -770,15 +738,16 @@ export function useChatSession(
     } catch (error) {
       setState((s) => ({ ...s, error: String(error) }));
     }
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const addTemplate = useCallback(async (templateId: string) => {
-    if (isDemo || !supabase || !userId) return;
-    const template = await Repo.getPromptTemplate(supabase, templateId);
+    const template = isLocalMode
+      ? await LocalRepo.getPromptTemplate(templateId)
+      : await Repo.getPromptTemplate(supabase!, templateId);
     if (!template) return;
     setState((s) => ({ ...s, activeTemplate: template }));
     await syncMeta({ _template_id: templateId });
-  }, [isDemo, syncMeta, userId]);
+  }, [isLocalMode, syncMeta]);
 
   const removeTemplate = useCallback(async () => {
     setState((s) => ({ ...s, activeTemplate: null }));
@@ -827,22 +796,32 @@ export function useChatSession(
 
   const saveSummary = useCallback(async (text: string) => {
     setState((s) => ({ ...s, summaryText: text, summaryEnabled: !!text }));
-    if (!isDemo && supabase && userId && stateRef.current.activeSessionId) {
-      await Repo.updateSession(supabase, stateRef.current.activeSessionId, userId, { story_summary: text || null }).catch(() => {});
+    if (stateRef.current.activeSessionId) {
+      if (isLocalMode) {
+        await LocalRepo.updateSession(stateRef.current.activeSessionId, { story_summary: text || null }).catch(() => {});
+      } else {
+        const updated = await Repo.updateSession(supabase!, stateRef.current.activeSessionId, userId!, { story_summary: text || null }).catch(() => null);
+        if (updated) LocalMirror.mirrorSession(updated);
+      }
     }
     await syncMeta({ _summary_enabled: !!text });
-  }, [isDemo, syncMeta, userId]);
+  }, [isLocalMode, syncMeta, userId]);
 
   const clearSummary = useCallback(async () => {
     setState((s) => ({ ...s, summaryText: "", summaryEnabled: false }));
-    if (!isDemo && supabase && userId && stateRef.current.activeSessionId) {
-      await Repo.updateSession(supabase, stateRef.current.activeSessionId, userId, { story_summary: null }).catch(() => {});
+    if (stateRef.current.activeSessionId) {
+      if (isLocalMode) {
+        await LocalRepo.updateSession(stateRef.current.activeSessionId, { story_summary: null }).catch(() => {});
+      } else {
+        const updated = await Repo.updateSession(supabase!, stateRef.current.activeSessionId, userId!, { story_summary: null }).catch(() => null);
+        if (updated) LocalMirror.mirrorSession(updated);
+      }
     }
     await syncMeta({ _summary_enabled: false });
-  }, [isDemo, syncMeta, userId]);
+  }, [isLocalMode, syncMeta, userId]);
 
   const generateSummary = useCallback(async (): Promise<string | null> => {
-    if (isDemo || !apiConfigured) return null;
+    if (!apiConfigured) return null;
     const messages = stateRef.current.messages.filter((message) => message.role !== "system").slice(-20);
     if (messages.length < 2) return null;
     try {
@@ -858,7 +837,7 @@ export function useChatSession(
     } catch {
       return null;
     }
-  }, [apiConfigured, buildConfig, isDemo]);
+  }, [apiConfigured, buildConfig]);
 
   const generateMemorySuggestions = useCallback(async (source?: { messageIndex?: number }): Promise<MemorySuggestionDraft[] | null> => {
     const current = stateRef.current;
@@ -952,7 +931,10 @@ export function useChatSession(
           salience: draft.salience,
           status,
         });
-        if (saved) createdIds.push(saved.id);
+        if (saved) {
+          createdIds.push(saved.id);
+          LocalMirror.mirrorMemory(saved);
+        }
       }
 
       if (status === "active" && createdIds.length > 0) {
@@ -974,8 +956,11 @@ export function useChatSession(
     try {
       if (status === "deleted") {
         await Repo.deleteMemory(supabase, memoryId, userId);
+        const mem = current.suggestedMemories.find((m) => m.id === memoryId);
+        if (mem) LocalMirror.mirrorMemory({ ...mem, status: "deleted", deleted_at: new Date().toISOString(), deleted_reason: "user_deleted", updated_at: new Date().toISOString() });
       } else {
-        await Repo.updateMemory(supabase, memoryId, userId, { status });
+        const updated = await Repo.updateMemory(supabase, memoryId, userId, { status });
+        if (updated) LocalMirror.mirrorMemory(updated);
       }
 
       let memoryIds = current.memoryIds;
@@ -1099,7 +1084,7 @@ export function useChatSession(
       abortRef.current = null;
     }
 
-    if (!isDemo && supabase && userId && stateRef.current.activeSessionId) {
+    if (stateRef.current.activeSessionId) {
       setState((s) => ({ ...s, saveStatus: "saving" }));
       let userDbId: string | null = null;
       let assistantDbId: string | null = null;
@@ -1108,12 +1093,18 @@ export function useChatSession(
       try {
         const sessionId = stateRef.current.activeSessionId;
         const characterId = contextCharacter?.id ?? stateRef.current.activeCharacter?.id ?? null;
-        const branch = await Repo.ensureDefaultBranch(supabase, sessionId, userId);
+        const branch = isLocalMode
+          ? await LocalRepo.ensureDefaultBranch(sessionId)
+          : await Repo.ensureDefaultBranch(supabase!, sessionId, userId!);
+        if (!isLocalMode && branch) LocalMirror.mirrorBranch(branch);
         const branchId = branch?.id;
         if (branchId) {
           // Only create new user message in DB if NOT editing (edit already updated the existing row)
           if (!isEdit) {
-            const savedUser = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "user", content_text: text });
+            const savedUser = isLocalMode
+              ? await LocalRepo.createMessage({ session_id: sessionId, branch_id: branchId, role: "user", content_text: text })
+              : await Repo.createMessage(supabase!, userId!, { session_id: sessionId, branch_id: branchId, role: "user", content_text: text });
+            if (!isLocalMode && savedUser) LocalMirror.mirrorMessage(savedUser);
             userDbId = savedUser?.id ?? null;
             userCreatedAt = savedUser?.created_at ?? null;
           } else {
@@ -1124,27 +1115,60 @@ export function useChatSession(
             if (hasRoleSession && !characterId) {
               console.warn("[Chat] refusing to save role assistant message without character_id", { sessionId });
             } else {
-              const asstMsg = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined });
+              const asstMsg = isLocalMode
+                ? await LocalRepo.createMessage({ session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined })
+                : await Repo.createMessage(supabase!, userId!, { session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined });
+              if (!isLocalMode && asstMsg) LocalMirror.mirrorMessage(asstMsg);
               assistantDbId = asstMsg?.id ?? null;
               assistantCreatedAt = asstMsg?.created_at ?? null;
               // Persist old assistant content as a revision of the new assistant message
               if (assistantDbId && opts?.oldAssistantContentForRevision?.trim()) {
-                await Repo.createMessageRevision(supabase, userId, {
-                  message_id: assistantDbId,
-                  revision_no: 1,
-                  content_text: opts.oldAssistantContentForRevision,
-                }).catch((e) => {
+                const revResult = await (isLocalMode
+                  ? LocalRepo.createMessageRevision({
+                      message_id: assistantDbId,
+                      revision_no: 1,
+                      content_text: opts.oldAssistantContentForRevision,
+                    })
+                  : Repo.createMessageRevision(supabase!, userId!, {
+                      message_id: assistantDbId,
+                      revision_no: 1,
+                      content_text: opts.oldAssistantContentForRevision,
+                    })).catch((e) => {
                   console.warn("[Chat] assistant revision save failed:", e);
+                  return null;
                 });
+                if (!isLocalMode && revResult) LocalMirror.mirrorMessageRevision(revResult);
               }
             }
           }
-          await Repo.updateSession(supabase, sessionId, userId, { last_message_at: new Date().toISOString() });
+          if (isLocalMode) await LocalRepo.updateSession(sessionId, { last_message_at: new Date().toISOString() });
+          else {
+            const updatedSession = await Repo.updateSession(supabase!, sessionId, userId!, { last_message_at: new Date().toISOString() });
+            if (updatedSession) LocalMirror.mirrorSession(updatedSession);
+          }
         }
 
         // Persist context_run (with message_id bound to assistant reply)
         if (contextOutput && branchId) {
-          Repo.saveContextRun(supabase, userId, {
+          const crPromise = isLocalMode
+            ? LocalRepo.saveContextRun({
+                session_id: sessionId,
+                branch_id: branchId,
+                trigger_message_id: userDbId,
+                message_id: assistantDbId,
+                provider: storedProvider,
+                model: stateRef.current.model,
+                system_prompt: contextOutput.systemPrompt,
+                provider_messages_json: providerMessages,
+                worldbook_hits_json: contextOutput.triggerResult.triggered.filter((h) => h.injected).map((h) => ({ id: h.entry.id, title: h.entry.title, keywords: h.matchedKeywords })),
+                skipped_entries_json: contextOutput.triggerResult.skipped.map((s) => ({ id: s.entry.id, title: s.entry.title, reason: s.reason })),
+                injected_memories_json: contextOutput.budget.memories.map((m) => ({ id: m.id, title: m.title })),
+                summary_text: contextOutput.sessionSummaryInjected ? (stateRef.current.summaryText || null) : null,
+                token_budget: contextOutput.budget.budgetLimit,
+                estimated_tokens: contextOutput.estimatedTokens,
+                debug_enabled: false,
+              })
+            : Repo.saveContextRun(supabase!, userId!, {
             session_id: sessionId,
             branch_id: branchId,
             trigger_message_id: userDbId,
@@ -1160,7 +1184,9 @@ export function useChatSession(
             token_budget: contextOutput.budget.budgetLimit,
             estimated_tokens: contextOutput.estimatedTokens,
             debug_enabled: false,
-          }).then(() => {
+          });
+          crPromise.then((cr) => {
+            if (!isLocalMode && cr) LocalMirror.mirrorContextRun(cr);
             setState((s) => ({ ...s, contextRunSaveStatus: "saved" }));
           }).catch((e) => {
             console.warn("[Chat] context_run save failed:", e);
@@ -1195,8 +1221,8 @@ export function useChatSession(
     }
 
     setState((s) => ({ ...s, isStreaming: false, isSending: false }));
-    if (!isDemo) void loadSessions();
-  }, [buildConfig, buildCurrentContext, isDemo, loadSessions, userId]);
+    void loadSessions();
+  }, [buildConfig, buildCurrentContext, isDemo, isLocalMode, loadSessions, userId]);
 
   const regenerateLast = useCallback(async () => {
     const messages = stateRef.current.messages.filter((message) => message.role !== "system");
@@ -1225,7 +1251,7 @@ export function useChatSession(
         oldAssistantContent ? oldAssistantContent.slice(0, 30) : "(none)");
     }
 
-    // Save old version as revision in DB
+    // Save old version as revision in DB (cloud or local)
     if (!isDemo && supabase && userId && s.activeSessionId) {
       const dbId = s.messageDbIds.get(messageIndex);
       if (dbId) {
@@ -1286,6 +1312,66 @@ export function useChatSession(
           console.warn("[Chat] editAndResend DB sync failed:", e);
         }
       }
+    } else if (isLocalMode && s.activeSessionId) {
+      const dbId = s.messageDbIds.get(messageIndex);
+      if (dbId) {
+        const oldContent = messages[messageIndex].content;
+        try {
+          // Fetch current revision_no from local DB
+          const currentMsg = await LocalRepo.getMessage(dbId);
+          const currentRev = currentMsg?.revision_no ?? 1;
+
+          // Save revision of old content
+          await LocalRepo.createMessageRevision({
+            message_id: dbId,
+            revision_no: currentRev,
+            content_text: oldContent,
+          });
+          setState((prev) => {
+            const nextCounts = new Map(prev.messageRevisionCounts);
+            nextCounts.set(dbId, (nextCounts.get(dbId) ?? 0) + 1);
+            const nextRevisions = new Map(prev.messageRevisions);
+            nextRevisions.delete(dbId);
+            return { ...prev, messageRevisionCounts: nextCounts, messageRevisions: nextRevisions };
+          });
+          // Update message content and increment revision
+          await LocalRepo.updateMessage(dbId, {
+            content_text: newText,
+            edited_at: new Date().toISOString(),
+            revision_no: currentRev + 1,
+          });
+
+          // Soft-delete subsequent assistant messages
+          const subsequentIds: string[] = [];
+          for (let i = messageIndex + 1; i < messages.length; i++) {
+            const mid = s.messageDbIds.get(i);
+            if (mid) subsequentIds.push(mid);
+          }
+          for (const mid of subsequentIds) {
+            await LocalRepo.deleteMessage(mid, "superseded_by_edit").catch(() => {});
+          }
+          if (subsequentIds.length > 0) {
+            await LocalRepo.supersedeMessages(subsequentIds, dbId).catch(() => {});
+          }
+
+          // Create a new branch if editing historical (not last) message
+          if (messageIndex < messages.length - 1) {
+            const branch = await LocalRepo.createBranch({
+              session_id: s.activeSessionId,
+              name: `branch-${Date.now()}`,
+              title: `分支 ${(currentRev + 1)}`,
+              parent_branch_id: s.activeBranchId ?? undefined,
+              forked_from_message_id: dbId,
+            });
+            if (branch) {
+              await LocalRepo.setActiveBranch(s.activeSessionId, branch.id);
+              setState((prev) => ({ ...prev, activeBranchId: branch.id, activeBranchName: branch.title || branch.name }));
+            }
+          }
+        } catch (e) {
+          console.warn("[Chat] editAndResend local DB sync failed:", e);
+        }
+      }
     }
 
     // Mark this index as edited so version arrows show up
@@ -1302,11 +1388,15 @@ export function useChatSession(
   const deleteMessage = useCallback(async (messageIndex: number) => {
     const s = stateRef.current;
     // Sync delete to DB first — don't remove from UI until DB confirms
-    if (!isDemo && supabase && userId && s.activeSessionId) {
+    if (s.activeSessionId) {
       const dbId = s.messageDbIds.get(messageIndex);
       if (dbId) {
         try {
-          await Repo.deleteMessage(supabase, dbId, userId, "user_deleted");
+          if (isLocalMode) await LocalRepo.deleteMessage(dbId, "user_deleted");
+          else {
+            await Repo.deleteMessage(supabase!, dbId, userId!, "user_deleted");
+            LocalMirror.mirrorMessageDeletion(dbId, new Date().toISOString(), "user_deleted");
+          }
         } catch (e) {
           console.warn("[Chat] deleteMessage DB sync failed:", e);
           setState((prev) => ({ ...prev, error: "删除消息失败，请重试" }));
@@ -1328,7 +1418,7 @@ export function useChatSession(
         editedIndices: removeIndexedSet(prev.editedIndices, messageIndex),
       };
     });
-  }, [isDemo, userId]);
+  }, [isLocalMode, userId]);
 
   const copyMessage = useCallback((messageIndex: number) => {
     const text = stateRef.current.messages[messageIndex]?.content;
@@ -1337,9 +1427,11 @@ export function useChatSession(
 
   const loadMessageRevisions = useCallback(async (messageIndex: number): Promise<MessageRevisionRow[]> => {
     const dbId = stateRef.current.messageDbIds.get(messageIndex);
-    if (!dbId || !supabase) return [];
+    if (!dbId) return [];
     try {
-      const revisions = await Repo.loadMessageRevisions(supabase, dbId);
+      const revisions = isLocalMode
+        ? await LocalRepo.loadMessageRevisions(dbId)
+        : await Repo.loadMessageRevisions(supabase!, dbId);
       setState((s) => {
         const newRevisions = new Map(s.messageRevisions);
         const newCounts = new Map(s.messageRevisionCounts);
@@ -1352,11 +1444,11 @@ export function useChatSession(
       console.warn("[Chat] message revisions load failed:", error);
       return [];
     }
-  }, []);
+  }, [isLocalMode]);
 
   const loadOlderMessages = useCallback(async () => {
     const current = stateRef.current;
-    if (isDemo || !supabase || !current.activeSessionId || current.isLoadingOlderMessages || !current.hasMoreMessages) {
+    if (!current.activeSessionId || current.isLoadingOlderMessages || !current.hasMoreMessages) {
       return;
     }
 
@@ -1370,14 +1462,21 @@ export function useChatSession(
     setState((s) => ({ ...s, isLoadingOlderMessages: true }));
     try {
       const page = await withTimeout(
-        Repo.listMessagesPage(supabase, current.activeSessionId, current.activeBranchId, UI_MESSAGE_PAGE_SIZE, {
-          id: beforeId,
-          createdAt: beforeCreatedAt,
-        }),
+        isLocalMode
+          ? LocalRepo.listMessagesPage(current.activeSessionId, current.activeBranchId, UI_MESSAGE_PAGE_SIZE, {
+              id: beforeId,
+              createdAt: beforeCreatedAt,
+            })
+          : Repo.listMessagesPage(supabase!, current.activeSessionId, current.activeBranchId, UI_MESSAGE_PAGE_SIZE, {
+              id: beforeId,
+              createdAt: beforeCreatedAt,
+            }),
         5000,
         "older message load timed out",
       );
-      const revisionCounts = await Repo.getMessageRevisionCounts(supabase, page.rows.map((row) => row.id)).catch((error) => {
+      const revisionCounts = await (isLocalMode
+        ? LocalRepo.getMessageRevisionCounts(page.rows.map((row) => row.id))
+        : Repo.getMessageRevisionCounts(supabase!, page.rows.map((row) => row.id))).catch((error) => {
         console.warn("[Chat] older message revision count load failed:", error);
         return new Map<string, number>();
       });
@@ -1408,7 +1507,7 @@ export function useChatSession(
       console.warn("[Chat] older message load failed:", error);
       setState((s) => ({ ...s, isLoadingOlderMessages: false, error: "加载更早消息失败，请稍后重试。" }));
     }
-  }, [isDemo]);
+  }, [isLocalMode]);
 
   const retry = useCallback(async () => {
     const lastUser = [...stateRef.current.messages].reverse().find((message) => message.role === "user");
@@ -1420,13 +1519,13 @@ export function useChatSession(
   }, [loadSessions]);
 
   useEffect(() => {
-    if (isDemo || !state.activeSessionId || state.isContextLoading) return;
+    if (!state.activeSessionId || state.isContextLoading) return;
     if (loadedSessionRef.current === state.activeSessionId) return;
     void selectSession(state.activeSessionId);
-  }, [isDemo, selectSession, state.activeSessionId, state.isContextLoading]);
+  }, [selectSession, state.activeSessionId, state.isContextLoading]);
 
   useEffect(() => {
-    if (isDemo || !state.activeSessionId || state.isStreaming) return;
+    if (!state.activeSessionId || state.isStreaming) return;
     if (loadedSessionRef.current !== state.activeSessionId) return;
     const seq = ++previewSeqRef.current;
     setState((s) => ({ ...s, contextPreviewError: null }));
@@ -1441,7 +1540,6 @@ export function useChatSession(
       });
   }, [
     buildCurrentContext,
-    isDemo,
     state.activeCharacter?.id,
     state.activeSessionId,
     state.activeTemplate?.id,
@@ -1457,7 +1555,7 @@ export function useChatSession(
   const providerLabel = isDemo ? "Mock (Demo)" : storedProvider === "deepseek" ? "DeepSeek" : "OpenAI Compatible";
   const modelLabel = isDemo ? "mock" : state.model;
   const runtimeMode = isDemo
-    ? "demo_mock"
+    ? "local_mock_preview"
     : storageMode === "hosted_encrypted"
       ? "hosted_encrypted"
       : storageMode === "local_device"
