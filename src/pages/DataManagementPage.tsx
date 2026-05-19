@@ -225,8 +225,13 @@ export function DataManagementPage() {
             返回设置
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-ink-900">数据管理</h1>
-            <p className="text-sm text-ink-400 mt-1">导出备份、导入恢复、回收站与安全边界收口。</p>
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-500">
+                <Shield className="h-4 w-4" />
+              </div>
+              <h1 className="text-xl font-bold text-ink-900">数据保险箱</h1>
+            </div>
+            <p className="text-xs text-ink-400 mt-1">本地数据保护 · 备份恢复 · 回收站</p>
           </div>
         </div>
         <ModeBadge />
@@ -315,12 +320,13 @@ export function DataManagementPage() {
               </p>
             </div>
           </label>
-          <div className="flex items-center gap-2">
-            <button onClick={() => void handleExport()} disabled={exporting || statsLoading} className="btn-primary text-sm disabled:opacity-50">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => void handleExport()} disabled={exporting || statsLoading} className="btn-primary px-6 py-3 text-sm font-semibold disabled:opacity-50 shadow-lg shadow-brand-200/30">
+              <Download className="mr-1.5 h-4 w-4" />
               {exporting ? "导出处理中..." : "导出 JSON 备份"}
             </button>
             <button onClick={() => void refreshStats()} disabled={statsLoading} className="btn-ghost text-sm disabled:opacity-50">
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${statsLoading ? "animate-spin" : ""}`} />
               刷新统计
             </button>
           </div>
