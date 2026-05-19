@@ -393,6 +393,73 @@ export async function listMessages(
   return (data as MessageRow[]) ?? [];
 }
 
+export interface MessagePageCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface MessagePageResult {
+  rows: MessageRow[];
+  hasMore: boolean;
+}
+
+function applyMainlineMessageFilters(query: any) {
+  return query
+    .is("deleted_at", null)
+    .is("superseded_by_message_id", null)
+    .eq("hidden", false);
+}
+
+export async function listMessagesPage(
+  supabase: SupabaseClient,
+  sessionId: string,
+  branchId: string | null | undefined,
+  limit: number,
+  before?: MessagePageCursor | null,
+): Promise<MessagePageResult> {
+  let query = applyMainlineMessageFilters(
+    supabase
+      .from("messages")
+      .select("*")
+      .eq("session_id", sessionId),
+  )
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+
+  if (branchId) {
+    query = query.eq("branch_id", branchId);
+  }
+
+  if (before) {
+    query = query.or(
+      `created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})`,
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const descending = (data as MessageRow[]) ?? [];
+  const hasMore = descending.length > limit;
+  const rows = (hasMore ? descending.slice(0, limit) : descending).reverse();
+
+  return {
+    rows,
+    hasMore,
+  };
+}
+
+export async function listRecentMessagesForContext(
+  supabase: SupabaseClient,
+  sessionId: string,
+  branchId: string | null | undefined,
+  limit: number,
+): Promise<MessageRow[]> {
+  const page = await listMessagesPage(supabase, sessionId, branchId, limit);
+  return page.rows;
+}
+
 export async function createMessage(
   supabase: SupabaseClient,
   userId: string,
@@ -907,6 +974,31 @@ export async function listMemories(
   }
 
   const { data } = await query;
+  return (data as MemoryRow[]) ?? [];
+}
+
+export async function listMemoriesByStatus(
+  supabase: SupabaseClient,
+  userId: string,
+  statuses: MemoryRow["status"][],
+  sessionId?: string,
+): Promise<MemoryRow[]> {
+  if (statuses.length === 0) return [];
+
+  let query = supabase
+    .from("memories")
+    .select("*")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .in("status", statuses)
+    .order("updated_at", { ascending: false });
+
+  if (sessionId) {
+    query = query.eq("session_id", sessionId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
   return (data as MemoryRow[]) ?? [];
 }
 

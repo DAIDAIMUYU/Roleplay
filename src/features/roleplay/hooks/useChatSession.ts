@@ -6,7 +6,7 @@ import { buildConfigFromStorage, sendProviderStreamRequest } from "../providers/
 import { loadApiKey } from "../storage/apiKeyStorage";
 import * as Repo from "../repositories/roleplayRepository";
 import { createDemoSession, getDefaultDemoSession } from "../mock/demoData";
-import type { CharacterRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
+import type { CharacterRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
 import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
 
@@ -45,9 +45,14 @@ export interface ChatState {
   activeBranchName: string | null;
   contextRunSaveStatus: "idle" | "saved" | "failed" | null;
   messageDbIds: Map<number, string>;
+  messageCreatedAts: Map<number, string>;
   messageRevisions: Map<string, MessageRevisionRow[]>;
   messageRevisionCounts: Map<string, number>;
   editedIndices: Set<number>;
+  hasMoreMessages: boolean;
+  isLoadingOlderMessages: boolean;
+  suggestedMemories: MemoryRow[];
+  isGeneratingMemorySuggestions: boolean;
 }
 
 export interface ChatActions {
@@ -73,6 +78,10 @@ export interface ChatActions {
   clearSummary: () => Promise<void>;
   generateSummary: () => Promise<string | null>;
   loadMessageRevisions: (messageIndex: number) => Promise<MessageRevisionRow[]>;
+  loadOlderMessages: () => Promise<void>;
+  generateMemorySuggestions: (source?: { messageIndex?: number }) => Promise<MemorySuggestionDraft[] | null>;
+  saveMemorySuggestions: (drafts: MemorySuggestionDraft[], status: "active" | "suggested") => Promise<void>;
+  updateSuggestedMemoryStatus: (memoryId: string, status: "active" | "disabled" | "deleted") => Promise<void>;
   isDemo: boolean;
   apiConfigured: boolean;
   providerLabel: string;
@@ -80,6 +89,15 @@ export interface ChatActions {
   runtimeMode: string;
   messageCount: number;
   systemPrompt: string | null;
+}
+
+export interface MemorySuggestionDraft {
+  memory_type: MemoryRow["memory_type"];
+  title: string;
+  content: string;
+  salience: number;
+  reason: string;
+  sourceMessageId: string | null;
 }
 
 interface BuiltContext {
@@ -105,6 +123,154 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 
 function toChatMessages(rows: Awaited<ReturnType<typeof Repo.listMessages>>): ChatMessage[] {
   return rows.map((row) => ({ role: row.role as ChatMessage["role"], content: row.content_text }));
+}
+
+const UI_MESSAGE_PAGE_SIZE = 50;
+const CONTEXT_MESSAGE_LIMIT = 40;
+const MEMORY_SUGGESTION_MESSAGE_LIMIT = 20;
+
+function truncateIndexedMap<T>(map: Map<number, T>, maxExclusive: number): Map<number, T> {
+  const next = new Map<number, T>();
+  map.forEach((value, key) => {
+    if (key < maxExclusive) next.set(key, value);
+  });
+  return next;
+}
+
+function removeIndexedMapEntry<T>(map: Map<number, T>, removedIndex: number): Map<number, T> {
+  const next = new Map<number, T>();
+  map.forEach((value, key) => {
+    if (key < removedIndex) next.set(key, value);
+    else if (key > removedIndex) next.set(key - 1, value);
+  });
+  return next;
+}
+
+function prependIndexedMapEntries<T>(map: Map<number, T>, insertedCount: number): Map<number, T> {
+  const next = new Map<number, T>();
+  map.forEach((value, key) => {
+    next.set(key + insertedCount, value);
+  });
+  return next;
+}
+
+function buildIndexedMessageMetadata(
+  rows: Awaited<ReturnType<typeof Repo.listMessages>>,
+  revisionCounts?: Map<string, number>,
+): {
+  messageDbIds: Map<number, string>;
+  messageCreatedAts: Map<number, string>;
+  editedIndices: Set<number>;
+} {
+  const messageDbIds = new Map<number, string>();
+  const messageCreatedAts = new Map<number, string>();
+  const editedIndices = new Set<number>();
+  rows.forEach((row, index) => {
+    messageDbIds.set(index, row.id);
+    messageCreatedAts.set(index, row.created_at);
+    if ((row.revision_no ?? 1) > 1 || (revisionCounts?.get(row.id) ?? 0) > 0) {
+      editedIndices.add(index);
+    }
+  });
+  return {
+    messageDbIds,
+    messageCreatedAts,
+    editedIndices,
+  };
+}
+
+const MEMORY_TYPE_OPTIONS: MemoryRow["memory_type"][] = [
+  "short_term",
+  "long_term",
+  "summary",
+  "event",
+  "relationship",
+  "user_preference",
+  "character_preference",
+];
+
+function normalizeMemoryType(value: unknown): MemoryRow["memory_type"] {
+  if (typeof value !== "string") return "event";
+  return MEMORY_TYPE_OPTIONS.includes(value as MemoryRow["memory_type"])
+    ? (value as MemoryRow["memory_type"])
+    : "event";
+}
+
+function clampSalience(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number.parseInt(String(value ?? "50"), 10);
+  if (Number.isNaN(numeric)) return 50;
+  return Math.min(100, Math.max(0, numeric));
+}
+
+function stripJsonCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("```")) return trimmed;
+  return trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+}
+
+function parseMemorySuggestionDrafts(raw: string, sourceMessageId?: string | null): MemorySuggestionDraft[] {
+  const normalized = stripJsonCodeFence(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(normalized);
+  } catch {
+    const match = normalized.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("模型返回的内容不是有效 JSON。");
+    }
+    parsed = JSON.parse(match[0]);
+  }
+
+  const list = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { memories?: unknown[] }).memories)
+      ? (parsed as { memories: unknown[] }).memories
+      : [parsed];
+
+  const drafts: MemorySuggestionDraft[] = [];
+  list.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const title = String(record.title ?? "").trim() || "未命名记忆";
+    const content = String(record.content ?? "").trim();
+    if (!content) return;
+    drafts.push({
+      memory_type: normalizeMemoryType(record.memory_type),
+      title,
+      content,
+      salience: clampSalience(record.salience),
+      reason: String(record.reason ?? "").trim(),
+      sourceMessageId: sourceMessageId ?? null,
+    });
+  });
+
+  if (drafts.length === 0) {
+    throw new Error("模型没有返回可用的记忆建议。");
+  }
+  return drafts;
+}
+
+function shiftIndexedSet(set: Set<number>, insertedCount: number): Set<number> {
+  const next = new Set<number>();
+  set.forEach((value) => next.add(value + insertedCount));
+  return next;
+}
+
+function removeIndexedSet(set: Set<number>, removedIndex: number): Set<number> {
+  const next = new Set<number>();
+  set.forEach((value) => {
+    if (value < removedIndex) next.add(value);
+    else if (value > removedIndex) next.add(value - 1);
+  });
+  return next;
+}
+
+function truncateIndexedSet(set: Set<number>, maxExclusive: number): Set<number> {
+  const next = new Set<number>();
+  set.forEach((value) => {
+    if (value < maxExclusive) next.add(value);
+  });
+  return next;
 }
 
 export function useChatSession(
@@ -141,9 +307,14 @@ export function useChatSession(
     activeBranchName: null,
     contextRunSaveStatus: null,
     messageDbIds: new Map(),
+    messageCreatedAts: new Map(),
     messageRevisions: new Map(),
     messageRevisionCounts: new Map(),
     editedIndices: new Set(),
+    hasMoreMessages: false,
+    isLoadingOlderMessages: false,
+    suggestedMemories: [],
+    isGeneratingMemorySuggestions: false,
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -203,6 +374,16 @@ export function useChatSession(
     await Repo.updateSession(supabase, activeSessionId, userId, { system_prompt: JSON.stringify(merged) }).catch(() => {});
   }, [isDemo, userId]);
 
+  const refreshSuggestedMemories = useCallback(async (sessionId?: string | null) => {
+    if (isDemo || !supabase || !userId) return;
+    try {
+      const rows = await Repo.listMemoriesByStatus(supabase, userId, ["suggested"], sessionId ?? undefined);
+      setState((s) => ({ ...s, suggestedMemories: rows }));
+    } catch (error) {
+      console.warn("[Chat] suggested memories load failed:", error);
+    }
+  }, [isDemo, userId]);
+
   const loadSessions = useCallback(async () => {
     if (isDemo) {
       const demo = getDefaultDemoSession();
@@ -259,9 +440,12 @@ export function useChatSession(
         activeBranchName: activeSessionId ? s.activeBranchName : null,
         contextRunSaveStatus: activeSessionId ? s.contextRunSaveStatus : null,
         messageDbIds: activeSessionId ? s.messageDbIds : new Map(),
+        messageCreatedAts: activeSessionId ? s.messageCreatedAts : new Map(),
         messageRevisions: activeSessionId ? s.messageRevisions : new Map(),
         messageRevisionCounts: activeSessionId ? s.messageRevisionCounts : new Map(),
         editedIndices: activeSessionId ? s.editedIndices : new Set(),
+        hasMoreMessages: activeSessionId ? s.hasMoreMessages : false,
+        suggestedMemories: activeSessionId ? s.suggestedMemories : [],
       };
     });
   }, [isDemo, userId]);
@@ -301,7 +485,15 @@ export function useChatSession(
     const globalEntries = allEntries.filter((entry) => entry.scope === "global" && !activeWbIds.includes(entry.worldbook_id));
     const activeMemIds = s.memoryIds.filter((id) => !s.disabledMemIds.includes(id));
     const relevantMems = allMems.filter((memory) => activeMemIds.includes(memory.id));
-    const recentMessages = (messagesOverride ?? s.messages).filter((message) => message.role !== "system");
+    const recentMessageRows = messagesOverride
+      ? null
+      : await withTimeout(
+          Repo.listRecentMessagesForContext(supabase, sessionId, s.activeBranchId, CONTEXT_MESSAGE_LIMIT),
+          5000,
+          "context message load timed out",
+        );
+    const recentMessages = (messagesOverride ?? (recentMessageRows ? toChatMessages(recentMessageRows) : s.messages))
+      .filter((message) => message.role !== "system");
 
     const output = buildContext({
       character,
@@ -334,8 +526,13 @@ export function useChatSession(
         activeBranchName: null,
         contextRunSaveStatus: null,
         messageDbIds: new Map(),
+        messageCreatedAts: new Map(),
         messageRevisions: new Map(),
         messageRevisionCounts: new Map(),
+        editedIndices: new Set(),
+        hasMoreMessages: false,
+        isLoadingOlderMessages: false,
+        suggestedMemories: [],
       }));
       return;
     }
@@ -356,11 +553,15 @@ export function useChatSession(
       const messages: ChatMessage[] = [];
       const greeting = character ? String((character.card_json as Record<string, unknown>)?.greeting ?? "") : "";
       const dbIdMap = new Map<number, string>();
+      const createdAtMap = new Map<number, string>();
       if (character && greeting) {
         messages.push({ role: "assistant", content: greeting });
         if (branchId) {
           const saved = await Repo.createMessage(supabase, userId, { session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId });
-          if (saved) dbIdMap.set(0, saved.id);
+          if (saved) {
+            dbIdMap.set(0, saved.id);
+            createdAtMap.set(0, saved.created_at);
+          }
         }
       }
 
@@ -386,9 +587,13 @@ export function useChatSession(
         activeBranchName: branchName,
         contextRunSaveStatus: null,
         messageDbIds: dbIdMap,
+        messageCreatedAts: createdAtMap,
         messageRevisions: new Map(),
         messageRevisionCounts: new Map(),
         editedIndices: new Set(),
+        hasMoreMessages: false,
+        isLoadingOlderMessages: false,
+        suggestedMemories: [],
       }));
     } catch (error) {
       setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
@@ -399,19 +604,36 @@ export function useChatSession(
     if (isDemo) {
       const demo = getDefaultDemoSession();
       loadedSessionRef.current = id;
-      setState((s) => ({ ...s, activeSessionId: id, messages: demo.messages, activeCharacter: null, activeTemplate: null, isContextLoading: false, activeBranchId: null, activeBranchName: null, contextRunSaveStatus: null, messageDbIds: new Map(), messageRevisions: new Map(), messageRevisionCounts: new Map() }));
+      setState((s) => ({
+        ...s,
+        activeSessionId: id,
+        messages: demo.messages,
+        activeCharacter: null,
+        activeTemplate: null,
+        isContextLoading: false,
+        activeBranchId: null,
+        activeBranchName: null,
+        contextRunSaveStatus: null,
+        messageDbIds: new Map(),
+        messageCreatedAts: new Map(),
+        messageRevisions: new Map(),
+        messageRevisionCounts: new Map(),
+        editedIndices: new Set(),
+        hasMoreMessages: false,
+        isLoadingOlderMessages: false,
+        suggestedMemories: [],
+      }));
       return;
     }
     if (!supabase) return;
 
     setState((s) => ({ ...s, activeSessionId: id, error: null, isContextLoading: true, lastContextOutput: null, contextPreviewError: null }));
     try {
-      const [session, participants, branch, rows] = await withTimeout(
+      const [session, participants, branch] = await withTimeout(
         Promise.all([
           Repo.getSession(supabase, id),
           Repo.listSessionParticipants(supabase, id),
           Repo.ensureDefaultBranch(supabase, id, userId!),
-          Repo.listMessages(supabase, id),
         ]),
         5000,
         "session load timed out",
@@ -428,14 +650,13 @@ export function useChatSession(
         "session character load timed out",
       );
 
-      const dbIdMap = new Map<number, string>();
-      const editedIdxSet = new Set<number>();
-      rows.forEach((row, i) => {
-        dbIdMap.set(i, row.id);
-        if ((row.revision_no ?? 1) > 1) editedIdxSet.add(i);
-      });
+      const page = await withTimeout(
+        Repo.listMessagesPage(supabase, id, branch?.id ?? null, UI_MESSAGE_PAGE_SIZE),
+        5000,
+        "message page load timed out",
+      );
       const revisionCounts = await withTimeout(
-        Repo.getMessageRevisionCounts(supabase, rows.map((row) => row.id)).catch((error) => {
+        Repo.getMessageRevisionCounts(supabase, page.rows.map((row) => row.id)).catch((error) => {
           console.warn("[Chat] message revision count load failed:", error);
           return new Map<string, number>();
         }),
@@ -445,16 +666,14 @@ export function useChatSession(
         console.warn("[Chat] message revision count load failed:", error);
         return new Map<string, number>();
       });
-      rows.forEach((row, i) => {
-        if ((revisionCounts.get(row.id) ?? 0) > 0) editedIdxSet.add(i);
-      });
+      const metadata = buildIndexedMessageMetadata(page.rows, revisionCounts);
 
       loadedSessionRef.current = id;
       setState((s) => ({
         ...s,
         activeCharacter: character,
         activeTemplate: template,
-        messages: toChatMessages(rows),
+        messages: toChatMessages(page.rows),
         worldbookIds: meta._worldbook_ids ?? [],
         memoryIds: meta._memory_ids ?? [],
         disabledWbIds: meta._disabled_worldbook_ids ?? [],
@@ -466,23 +685,48 @@ export function useChatSession(
         activeBranchId: branch?.id ?? null,
         activeBranchName: branch?.title || branch?.name || "主线",
         contextRunSaveStatus: null,
-        messageDbIds: dbIdMap,
+        messageDbIds: metadata.messageDbIds,
+        messageCreatedAts: metadata.messageCreatedAts,
         messageRevisions: new Map(),
         messageRevisionCounts: revisionCounts,
-        editedIndices: editedIdxSet,
+        editedIndices: metadata.editedIndices,
+        hasMoreMessages: page.hasMore,
+        isLoadingOlderMessages: false,
       }));
+      void refreshSuggestedMemories(id);
     } catch (error) {
       loadedSessionRef.current = id;
       setState((s) => ({ ...s, error: String(error), isContextLoading: false, contextPreviewError: "Context preview failed, chat is still available" }));
     }
-  }, [isDemo]);
+  }, [isDemo, refreshSuggestedMemories, userId]);
 
   const deleteSession = useCallback(async (id: string) => {
     if (isDemo) {
       setState((s) => {
         const sessions = s.sessions.filter((session) => session.id !== id);
         const deletingActive = s.activeSessionId === id;
-        return deletingActive ? { ...s, sessions, activeSessionId: sessions[0]?.id ?? null, messages: [], activeCharacter: null, activeTemplate: null, lastContextOutput: null, activeBranchId: null, activeBranchName: null, contextRunSaveStatus: null, messageDbIds: new Map(), messageRevisions: new Map(), messageRevisionCounts: new Map(), editedIndices: new Set() } : { ...s, sessions };
+        return deletingActive
+          ? {
+              ...s,
+              sessions,
+              activeSessionId: sessions[0]?.id ?? null,
+              messages: [],
+              activeCharacter: null,
+              activeTemplate: null,
+              lastContextOutput: null,
+              activeBranchId: null,
+              activeBranchName: null,
+              contextRunSaveStatus: null,
+              messageDbIds: new Map(),
+              messageCreatedAts: new Map(),
+              messageRevisions: new Map(),
+              messageRevisionCounts: new Map(),
+              editedIndices: new Set(),
+              hasMoreMessages: false,
+              isLoadingOlderMessages: false,
+              suggestedMemories: [],
+            }
+          : { ...s, sessions };
       });
       return;
     }
@@ -514,9 +758,13 @@ export function useChatSession(
           activeBranchName: deletingActive ? null : s.activeBranchName,
           contextRunSaveStatus: deletingActive ? null : s.contextRunSaveStatus,
           messageDbIds: deletingActive ? new Map() : s.messageDbIds,
+          messageCreatedAts: deletingActive ? new Map() : s.messageCreatedAts,
           messageRevisions: deletingActive ? new Map() : s.messageRevisions,
           messageRevisionCounts: deletingActive ? new Map() : s.messageRevisionCounts,
           editedIndices: deletingActive ? new Set() : s.editedIndices,
+          hasMoreMessages: deletingActive ? false : s.hasMoreMessages,
+          isLoadingOlderMessages: false,
+          suggestedMemories: deletingActive ? [] : s.suggestedMemories,
         };
       });
     } catch (error) {
@@ -612,6 +860,147 @@ export function useChatSession(
     }
   }, [apiConfigured, buildConfig, isDemo]);
 
+  const generateMemorySuggestions = useCallback(async (source?: { messageIndex?: number }): Promise<MemorySuggestionDraft[] | null> => {
+    const current = stateRef.current;
+    if (isDemo || !apiConfigured || !current.activeSessionId) return null;
+
+    setState((s) => ({ ...s, isGeneratingMemorySuggestions: true, error: null }));
+    try {
+      let sourceMessageId: string | null = null;
+      let sourceLines: string[] = [];
+
+      if (source?.messageIndex !== undefined) {
+        const message = current.messages[source.messageIndex];
+        if (!message || message.role === "system") {
+          throw new Error("当前消息不能用于提炼记忆。");
+        }
+        sourceMessageId = current.messageDbIds.get(source.messageIndex) ?? null;
+        sourceLines = [`${message.role === "user" ? "用户" : "角色"}：${message.content}`];
+      } else if (supabase) {
+        const rows = await withTimeout(
+          Repo.listRecentMessagesForContext(
+            supabase,
+            current.activeSessionId,
+            current.activeBranchId,
+            MEMORY_SUGGESTION_MESSAGE_LIMIT,
+          ),
+          5000,
+          "memory suggestion message load timed out",
+        );
+        sourceLines = rows
+          .map((row) => `${row.role === "user" ? "用户" : row.role === "assistant" ? "角色" : "系统"}：${row.content_text}`)
+          .filter((line) => !line.startsWith("系统："));
+      } else {
+        sourceLines = current.messages
+          .slice(-MEMORY_SUGGESTION_MESSAGE_LIMIT)
+          .map((message) => `${message.role === "user" ? "用户" : "角色"}：${message.content}`);
+      }
+
+      if (sourceLines.length === 0) {
+        throw new Error("没有可用于提炼的聊天内容。");
+      }
+
+      const summarySection = current.summaryText.trim()
+        ? `当前会话摘要：\n${current.summaryText.trim()}\n\n`
+        : "";
+      const prompt: ChatMessage[] = [
+        {
+          role: "system",
+          content:
+            "你是角色扮演聊天的记忆提炼助手。请从给定聊天中提炼 1 到 3 条值得长期保存的候选记忆。" +
+            "只返回 JSON，不要输出解释，不要使用 Markdown 代码块。" +
+            ' JSON 格式必须是数组，每项包含 memory_type、title、content、salience、reason。' +
+            " memory_type 只能是 short_term、long_term、summary、event、relationship、user_preference、character_preference 之一。" +
+            " salience 为 0-100 的整数。",
+        },
+        {
+          role: "user",
+          content:
+            `${summarySection}聊天内容：\n${sourceLines.join("\n")}\n\n` +
+            "请只保留稳定、有价值、对后续角色扮演有帮助的事实；不要提炼 API Key、账号、纯一次性寒暄或无关技术信息。" +
+            " 直接返回 JSON 数组。",
+        },
+      ];
+
+      let raw = "";
+      for await (const chunk of sendProviderStreamRequest(false, buildConfig(), prompt, undefined)) {
+        raw += chunk.content;
+      }
+      return parseMemorySuggestionDrafts(raw, sourceMessageId);
+    } catch (error) {
+      setState((s) => ({ ...s, error: error instanceof Error ? error.message : "AI 提炼记忆失败，请稍后重试。" }));
+      return null;
+    } finally {
+      setState((s) => ({ ...s, isGeneratingMemorySuggestions: false }));
+    }
+  }, [apiConfigured, buildConfig, isDemo]);
+
+  const saveMemorySuggestions = useCallback(async (drafts: MemorySuggestionDraft[], status: "active" | "suggested") => {
+    const current = stateRef.current;
+    if (isDemo || !supabase || !userId || !current.activeSessionId || drafts.length === 0) return;
+
+    try {
+      const createdIds: string[] = [];
+      for (const draft of drafts) {
+        const saved = await Repo.createMemory(supabase, userId, {
+          session_id: current.activeSessionId,
+          character_id: current.activeCharacter?.id ?? undefined,
+          memory_type: draft.memory_type,
+          title: draft.title,
+          content: draft.content,
+          source_message_id: draft.sourceMessageId ?? undefined,
+          salience: draft.salience,
+          status,
+        });
+        if (saved) createdIds.push(saved.id);
+      }
+
+      if (status === "active" && createdIds.length > 0) {
+        const memoryIds = unique([...stateRef.current.memoryIds, ...createdIds]);
+        const disabledMemIds = stateRef.current.disabledMemIds.filter((id) => memoryIds.includes(id));
+        setState((s) => ({ ...s, memoryIds, disabledMemIds }));
+        await syncMeta({ _memory_ids: memoryIds, _disabled_memory_ids: disabledMemIds });
+      }
+
+      await refreshSuggestedMemories(current.activeSessionId);
+    } catch (error) {
+      setState((s) => ({ ...s, error: error instanceof Error ? error.message : "保存记忆失败，请稍后重试。" }));
+    }
+  }, [isDemo, refreshSuggestedMemories, syncMeta, userId]);
+
+  const updateSuggestedMemoryStatus = useCallback(async (memoryId: string, status: "active" | "disabled" | "deleted") => {
+    const current = stateRef.current;
+    if (isDemo || !supabase || !userId) return;
+    try {
+      if (status === "deleted") {
+        await Repo.deleteMemory(supabase, memoryId, userId);
+      } else {
+        await Repo.updateMemory(supabase, memoryId, userId, { status });
+      }
+
+      let memoryIds = current.memoryIds;
+      let disabledMemIds = current.disabledMemIds;
+      if (status === "active") {
+        memoryIds = unique([...current.memoryIds, memoryId]);
+        disabledMemIds = current.disabledMemIds.filter((id) => id !== memoryId);
+      } else {
+        memoryIds = current.memoryIds.filter((id) => id !== memoryId);
+        disabledMemIds = current.disabledMemIds.filter((id) => id !== memoryId);
+      }
+
+      setState((s) => ({
+        ...s,
+        memoryIds,
+        disabledMemIds,
+        suggestedMemories: s.suggestedMemories.filter((memory) => memory.id !== memoryId || status === "active"),
+      }));
+      await syncMeta({ _memory_ids: memoryIds, _disabled_memory_ids: disabledMemIds });
+      await refreshSuggestedMemories(current.activeSessionId);
+    } catch (error) {
+      setState((s) => ({ ...s, error: error instanceof Error ? error.message : "更新记忆状态失败，请稍后重试。" }));
+    }
+  }, [isDemo, refreshSuggestedMemories, syncMeta, userId]);
+
   const stopGeneration = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -667,7 +1056,23 @@ export function useChatSession(
     } else {
       messagesAfterUser = [...current.messages, userMsg];
     }
-    setState((s) => ({ ...s, messages: messagesAfterUser, isSending: true, isStreaming: true, error: null, saveStatus: "idle", lastContextOutput: contextOutput }));
+    setState((s) => {
+      if (!isEdit) {
+        return { ...s, messages: messagesAfterUser, isSending: true, isStreaming: true, error: null, saveStatus: "idle", lastContextOutput: contextOutput };
+      }
+      return {
+        ...s,
+        messages: messagesAfterUser,
+        isSending: true,
+        isStreaming: true,
+        error: null,
+        saveStatus: "idle",
+        lastContextOutput: contextOutput,
+        messageDbIds: truncateIndexedMap(s.messageDbIds, editIndex + 1),
+        messageCreatedAts: truncateIndexedMap(s.messageCreatedAts, editIndex + 1),
+        editedIndices: truncateIndexedSet(s.editedIndices, editIndex + 1),
+      };
+    });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -698,6 +1103,8 @@ export function useChatSession(
       setState((s) => ({ ...s, saveStatus: "saving" }));
       let userDbId: string | null = null;
       let assistantDbId: string | null = null;
+      let userCreatedAt: string | null = null;
+      let assistantCreatedAt: string | null = null;
       try {
         const sessionId = stateRef.current.activeSessionId;
         const characterId = contextCharacter?.id ?? stateRef.current.activeCharacter?.id ?? null;
@@ -708,6 +1115,7 @@ export function useChatSession(
           if (!isEdit) {
             const savedUser = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "user", content_text: text });
             userDbId = savedUser?.id ?? null;
+            userCreatedAt = savedUser?.created_at ?? null;
           } else {
             // For edit mode, reuse the existing DB id for dbIdMap
             userDbId = current.messageDbIds.get(editIndex) ?? null;
@@ -718,10 +1126,9 @@ export function useChatSession(
             } else {
               const asstMsg = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined });
               assistantDbId = asstMsg?.id ?? null;
+              assistantCreatedAt = asstMsg?.created_at ?? null;
               // Persist old assistant content as a revision of the new assistant message
               if (assistantDbId && opts?.oldAssistantContentForRevision?.trim()) {
-                console.debug("[Chat] writing assistant revision: newMsgId=%s oldContent=%s",
-                  assistantDbId, opts.oldAssistantContentForRevision.slice(0, 30));
                 await Repo.createMessageRevision(supabase, userId, {
                   message_id: assistantDbId,
                   revision_no: 1,
@@ -730,17 +1137,6 @@ export function useChatSession(
                   console.warn("[Chat] assistant revision save failed:", e);
                 });
               }
-            }
-          }
-          if (assistantDbId && opts?.oldAssistantContentForRevision?.trim()) {
-            try {
-              await Repo.createMessageRevision(supabase, userId, {
-                message_id: assistantDbId,
-                revision_no: 1,
-                content_text: opts.oldAssistantContentForRevision,
-              });
-            } catch (error) {
-              console.warn("[Chat] assistant revision save failed:", error);
             }
           }
           await Repo.updateSession(supabase, sessionId, userId, { last_message_at: new Date().toISOString() });
@@ -776,14 +1172,17 @@ export function useChatSession(
         if (userDbId || assistantDbId) {
           setState((s) => {
             const newMap = new Map(s.messageDbIds);
+            const newCreatedAtMap = new Map(s.messageCreatedAts);
             const newCounts = new Map(s.messageRevisionCounts);
             const msgIdx = s.messages.length - (aiContent ? 2 : 1);
             if (userDbId) newMap.set(msgIdx, userDbId);
+            if (!isEdit && userDbId && userCreatedAt) newCreatedAtMap.set(msgIdx, userCreatedAt);
             if (assistantDbId) {
               newMap.set(msgIdx + 1, assistantDbId);
+              if (assistantCreatedAt) newCreatedAtMap.set(msgIdx + 1, assistantCreatedAt);
               if (opts?.oldAssistantContentForRevision?.trim()) newCounts.set(assistantDbId, 1);
             }
-            return { ...s, messageDbIds: newMap, messageRevisionCounts: newCounts };
+            return { ...s, messageDbIds: newMap, messageCreatedAts: newCreatedAtMap, messageRevisionCounts: newCounts };
           });
         }
 
@@ -803,7 +1202,14 @@ export function useChatSession(
     const messages = stateRef.current.messages.filter((message) => message.role !== "system");
     const lastUser = [...messages].reverse().find((message) => message.role === "user");
     if (!lastUser) return;
-    setState((s) => ({ ...s, messages: messages.slice(0, messages.lastIndexOf(lastUser) + 1) }));
+    const keepCount = messages.lastIndexOf(lastUser) + 1;
+    setState((s) => ({
+      ...s,
+      messages: messages.slice(0, keepCount),
+      messageDbIds: truncateIndexedMap(s.messageDbIds, keepCount),
+      messageCreatedAts: truncateIndexedMap(s.messageCreatedAts, keepCount),
+      editedIndices: truncateIndexedSet(s.editedIndices, keepCount),
+    }));
     await sendMessage(lastUser.content);
   }, [sendMessage]);
 
@@ -912,7 +1318,13 @@ export function useChatSession(
     setState((prev) => {
       const messages = [...prev.messages];
       messages.splice(messageIndex, 1);
-      return { ...prev, messages };
+      return {
+        ...prev,
+        messages,
+        messageDbIds: removeIndexedMapEntry(prev.messageDbIds, messageIndex),
+        messageCreatedAts: removeIndexedMapEntry(prev.messageCreatedAts, messageIndex),
+        editedIndices: removeIndexedSet(prev.editedIndices, messageIndex),
+      };
     });
   }, [isDemo, userId]);
 
@@ -939,6 +1351,62 @@ export function useChatSession(
       return [];
     }
   }, []);
+
+  const loadOlderMessages = useCallback(async () => {
+    const current = stateRef.current;
+    if (isDemo || !supabase || !current.activeSessionId || current.isLoadingOlderMessages || !current.hasMoreMessages) {
+      return;
+    }
+
+    const beforeId = current.messageDbIds.get(0);
+    const beforeCreatedAt = current.messageCreatedAts.get(0);
+    if (!beforeId || !beforeCreatedAt) {
+      setState((s) => ({ ...s, hasMoreMessages: false }));
+      return;
+    }
+
+    setState((s) => ({ ...s, isLoadingOlderMessages: true }));
+    try {
+      const page = await withTimeout(
+        Repo.listMessagesPage(supabase, current.activeSessionId, current.activeBranchId, UI_MESSAGE_PAGE_SIZE, {
+          id: beforeId,
+          createdAt: beforeCreatedAt,
+        }),
+        5000,
+        "older message load timed out",
+      );
+      const revisionCounts = await Repo.getMessageRevisionCounts(supabase, page.rows.map((row) => row.id)).catch((error) => {
+        console.warn("[Chat] older message revision count load failed:", error);
+        return new Map<string, number>();
+      });
+      const metadata = buildIndexedMessageMetadata(page.rows, revisionCounts);
+
+      setState((s) => {
+        const insertedCount = page.rows.length;
+        const messageDbIds = prependIndexedMapEntries(s.messageDbIds, insertedCount);
+        const messageCreatedAts = prependIndexedMapEntries(s.messageCreatedAts, insertedCount);
+        metadata.messageDbIds.forEach((value, key) => messageDbIds.set(key, value));
+        metadata.messageCreatedAts.forEach((value, key) => messageCreatedAts.set(key, value));
+
+        const messageRevisionCounts = new Map(s.messageRevisionCounts);
+        revisionCounts.forEach((value, key) => messageRevisionCounts.set(key, value));
+
+        return {
+          ...s,
+          messages: [...toChatMessages(page.rows), ...s.messages],
+          messageDbIds,
+          messageCreatedAts,
+          messageRevisionCounts,
+          editedIndices: new Set([...shiftIndexedSet(s.editedIndices, insertedCount), ...metadata.editedIndices]),
+          hasMoreMessages: page.hasMore,
+          isLoadingOlderMessages: false,
+        };
+      });
+    } catch (error) {
+      console.warn("[Chat] older message load failed:", error);
+      setState((s) => ({ ...s, isLoadingOlderMessages: false, error: "加载更早消息失败，请稍后重试。" }));
+    }
+  }, [isDemo]);
 
   const retry = useCallback(async () => {
     const lastUser = [...stateRef.current.messages].reverse().find((message) => message.role === "user");
@@ -1019,6 +1487,10 @@ export function useChatSession(
     clearSummary,
     generateSummary,
     loadMessageRevisions,
+    loadOlderMessages,
+    generateMemorySuggestions,
+    saveMemorySuggestions,
+    updateSuggestedMemoryStatus,
     isDemo,
     apiConfigured,
     providerLabel,

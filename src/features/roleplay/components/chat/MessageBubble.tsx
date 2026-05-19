@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Copy, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, ChevronLeft, ChevronRight, Copy, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import type { ChatMessage } from "../../providers/provider.types";
 import type { MessageRevisionRow } from "../../types/database";
 
@@ -11,6 +11,7 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
+  onExtractMemory?: () => void;
   isStreaming?: boolean;
   revisionCount?: number;
   revisions?: MessageRevisionRow[];
@@ -23,6 +24,7 @@ export function MessageBubble({
   onDelete,
   onRegenerate,
   onEdit,
+  onExtractMemory,
   isStreaming,
   revisionCount = 0,
   revisions,
@@ -51,7 +53,7 @@ export function MessageBubble({
 
   useEffect(() => {
     setSelectedVersionIndex(Math.max(0, totalVersions - 1));
-  }, [message.content, revisionCount]);
+  }, [message.content, revisionCount, totalVersions]);
 
   async function moveVersion(delta: number) {
     const nextIndex = Math.max(0, Math.min(totalVersions - 1, safeVersionIndex + delta));
@@ -74,7 +76,7 @@ export function MessageBubble({
   if (isSystem) {
     return (
       <div className="flex justify-center py-2">
-        <span className="text-xs text-ink-300 bg-surface-100 rounded-full px-3 py-1 italic">
+        <span className="rounded-full bg-surface-100 px-3 py-1 text-xs italic text-ink-300">
           {message.content}
         </span>
       </div>
@@ -82,18 +84,18 @@ export function MessageBubble({
   }
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4 group`}>
+    <div className={`group mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
           isUser
-            ? "bg-brand-500 text-white rounded-br-md"
-            : "bg-white border border-surface-100 shadow-sm rounded-bl-md"
+            ? "rounded-br-md bg-brand-500 text-white"
+            : "rounded-bl-md border border-surface-100 bg-white shadow-sm"
         }`}
       >
-        <p className={`text-xs mb-0.5 ${isUser ? "text-brand-100" : "text-ink-300"}`}>
+        <p className={`mb-0.5 text-xs ${isUser ? "text-brand-100" : "text-ink-300"}`}>
           {isUser ? "你" : "AI"}
           {isStreaming && !isUser && (
-            <span className="ml-1.5 inline-block h-3 w-1.5 bg-brand-400 rounded-full animate-pulse align-middle" />
+            <span className="ml-1.5 inline-block h-3 w-1.5 animate-pulse rounded-full bg-brand-400 align-middle" />
           )}
           {hasVersions && (
             <span className="ml-1 text-[10px] opacity-70">
@@ -102,28 +104,28 @@ export function MessageBubble({
           )}
         </p>
 
-        <p className={`text-sm whitespace-pre-wrap leading-relaxed break-words ${isUser ? "text-white" : "text-ink-700"}`}>
+        <p className={`break-words whitespace-pre-wrap text-sm leading-relaxed ${isUser ? "text-white" : "text-ink-700"}`}>
           {displayedContent}
           {isStreaming && !isUser && (
-            <span className="inline-block w-1.5 h-4 bg-ink-400 ml-0.5 animate-pulse rounded-sm align-text-bottom" />
+            <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-ink-400 align-text-bottom" />
           )}
         </p>
 
         {!isStreaming && (
           <div
-            className={`flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity ${
+            className={`mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ${
               isUser ? "justify-end" : "justify-start"
             }`}
           >
             {hasVersions && (
-              <div className={`flex items-center gap-0.5 mr-1 ${isUser ? "text-white/70" : "text-ink-400"}`}>
+              <div className={`mr-1 flex items-center gap-0.5 ${isUser ? "text-white/70" : "text-ink-400"}`}>
                 <VersionButton
                   direction="left"
                   disabled={atFirst || loadingRevisions}
                   isUser={isUser}
                   onClick={() => void moveVersion(-1)}
                 />
-                <span className="text-[10px] leading-none min-w-[2.75rem] text-center select-none">
+                <span className="min-w-[2.75rem] select-none text-center text-[10px] leading-none">
                   {safeVersionIndex + 1} / {totalVersions}
                 </span>
                 <VersionButton
@@ -141,6 +143,9 @@ export function MessageBubble({
             )}
             {isUser && onEdit && (
               <ActionBtn icon={<Edit3 className="h-3 w-3" />} title="编辑" onClick={onEdit} isUser={isUser} />
+            )}
+            {onExtractMemory && (
+              <ActionBtn icon={<Brain className="h-3 w-3" />} title="提炼记忆" onClick={onExtractMemory} isUser={isUser} />
             )}
             <ActionBtn icon={<Trash2 className="h-3 w-3" />} title="删除" onClick={onDelete} isUser={isUser} />
           </div>
@@ -168,14 +173,14 @@ function VersionButton({
       onClick={onClick}
       disabled={disabled}
       title={direction === "left" ? "上一版" : "下一版"}
-      className={`p-0.5 rounded transition-colors ${
+      className={`rounded p-0.5 transition-colors ${
         disabled
           ? isUser
-            ? "text-white/30 cursor-default"
-            : "text-ink-200 cursor-default"
+            ? "cursor-default text-white/30"
+            : "cursor-default text-ink-200"
           : isUser
-            ? "text-white/70 hover:text-white hover:bg-white/10"
-            : "text-ink-400 hover:text-ink-600 hover:bg-surface-100"
+            ? "text-white/70 hover:bg-white/10 hover:text-white"
+            : "text-ink-400 hover:bg-surface-100 hover:text-ink-600"
       }`}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -199,10 +204,10 @@ function ActionBtn({
       type="button"
       onClick={onClick}
       title={title}
-      className={`p-1 rounded transition-colors ${
+      className={`rounded p-1 transition-colors ${
         isUser
-          ? "text-white/60 hover:text-white hover:bg-white/10"
-          : "text-ink-300 hover:text-ink-500 hover:bg-surface-100"
+          ? "text-white/60 hover:bg-white/10 hover:text-white"
+          : "text-ink-300 hover:bg-surface-100 hover:text-ink-500"
       }`}
     >
       {icon}
