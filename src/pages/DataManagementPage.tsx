@@ -7,6 +7,12 @@ import { useAuth } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import type { ImportMode, ImportPreview, TrashEntityType, TrashListItem } from "../features/roleplay/types/dataManagement";
 import {
+  checkStoragePersistence,
+  getStorageProtectionStatus,
+  recordBackup,
+  requestStoragePersistence,
+} from "../features/roleplay/services/localStorageMetadata";
+import {
   buildBackupFile,
   downloadBackupFile,
   importBackupFile,
@@ -51,6 +57,31 @@ export function DataManagementPage() {
   const [trashLoading, setTrashLoading] = useState(false);
   const [trashError, setTrashError] = useState<string | null>(null);
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
+
+  // Storage protection
+  const [storageProtection, setStorageProtection] = useState<ReturnType<typeof getStorageProtectionStatus> | null>(null);
+  const [persistRequesting, setPersistRequesting] = useState(false);
+
+  async function checkProtection() {
+    const protection = getStorageProtectionStatus();
+    const { persisted } = await checkStoragePersistence();
+    setStorageProtection({ ...protection, persistenceGranted: persisted });
+  }
+
+  async function handleRequestPersistence() {
+    setPersistRequesting(true);
+    try {
+      const granted = await requestStoragePersistence();
+      setStorageProtection((prev) => prev ? { ...prev, persistenceGranted: granted } : null);
+    } finally {
+      setPersistRequesting(false);
+    }
+  }
+
+  // Check protection on mount and when stats load
+  useEffect(() => {
+    void checkProtection();
+  }, []);
 
   const exportEstimate = useMemo(() => {
     if (!stats) return null;
@@ -98,6 +129,7 @@ export function DataManagementPage() {
     try {
       const { fileName, jsonText, checksum } = await buildBackupFile(supabase, userId, includeContextRuns);
       downloadBackupFile(fileName, jsonText);
+      recordBackup(exportEstimate ? Object.values(exportEstimate).reduce((s, c) => s + c, 0) : 0);
       await recordBackupArtifact(supabase, userId, fileName, checksum).catch((error) => {
         console.warn("[DataManagement] backup metadata record failed:", error);
       });
@@ -225,6 +257,50 @@ export function DataManagementPage() {
               <span>调试上下文：{exportEstimate.context_runs}</span>
             </div>
           )}
+          {/* Storage Protection Status */}
+          {storageProtection ? (
+            <div className="rounded-card border border-surface-100 bg-surface-50 px-4 py-3">
+              <h3 className="text-sm font-semibold text-ink-700 mb-2">本地数据保护状态</h3>
+              <div className="grid gap-2 text-xs text-ink-500">
+                <div className="flex justify-between">
+                  <span>本地数据库</span>
+                  <span className="font-medium text-ink-700">{storageProtection.indexedDbAvailable ? "IndexedDB 可用" : "不可用"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>持久化存储</span>
+                  <span className={`font-medium ${storageProtection.persistenceGranted ? "text-emerald-600" : storageProtection.persistenceApiSupported ? "text-amber-600" : "text-ink-400"}`}>
+                    {storageProtection.persistenceGranted
+                      ? "已开启"
+                      : storageProtection.persistenceApiSupported
+                        ? "未开启"
+                        : "浏览器不支持"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>上次本地备份</span>
+                  <span className="font-medium text-ink-700">{storageProtection.lastBackupAt ? new Date(storageProtection.lastBackupAt).toLocaleString() : "尚未备份"}</span>
+                </div>
+              </div>
+              {!storageProtection.persistenceGranted && storageProtection.persistenceApiSupported ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => void handleRequestPersistence()}
+                    disabled={persistRequesting}
+                    className="btn-ghost text-xs text-brand-600 disabled:opacity-50"
+                  >
+                    {persistRequesting ? "请求中..." : "申请持久化存储"}
+                  </button>
+                  <span className="text-xs text-ink-400">向浏览器请求不自动清理本地数据</span>
+                </div>
+              ) : null}
+              {!storageProtection.lastBackupAt && stats ? (
+                <div className="mt-2 rounded-card border border-amber-100 bg-amber-light/20 px-3 py-2 text-xs text-amber-700">
+                  你尚未导出过本地备份。建议定期导出，避免清除浏览器数据后无法恢复。
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <label className="flex items-start gap-3 rounded-card border border-amber-100 bg-amber-light/20 px-4 py-3">
             <input
               type="checkbox"
