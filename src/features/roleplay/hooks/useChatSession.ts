@@ -1220,8 +1220,10 @@ export function useChatSession(
     const oldAssistantContent = messages
       .slice(messageIndex + 1)
       .find((message) => message.role === "assistant")?.content ?? null;
-    console.debug("[Chat] editAndResend: oldAssistantContent=%s",
-      oldAssistantContent ? oldAssistantContent.slice(0, 30) : "(none)");
+    if (import.meta.env.DEV) {
+      console.debug("[Chat] editAndResend: oldAssistantContent=%s",
+        oldAssistantContent ? oldAssistantContent.slice(0, 30) : "(none)");
+    }
 
     // Save old version as revision in DB
     if (!isDemo && supabase && userId && s.activeSessionId) {

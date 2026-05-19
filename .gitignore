@@ -26,3 +26,5 @@ tsconfig.tsbuildinfo
 playwright-mcp/
 
 .playwright-mcp/
+
+.claude/

@@ -1,57 +1,78 @@
-# 角色酒馆 V4.3 产品最终路线明确版需求包
+# 角色酒馆 (Roleplay Tavern) v4.3
 
-本包用于从零重做“角色酒馆”项目。V4.3 的核心目标是：
+AI 角色扮演聊天应用，支持 DeepSeek / OpenAI-compatible 等多 Provider，具备角色卡、提示词模板、世界书、记忆系统、消息版本历史、数据导出导入等完整产品功能。
 
-> 把所有重要功能都明确纳入阶段路线，避免“后期再说”“未来功能池”这种模糊规划。
+## 技术栈
 
-## 最高优先阅读顺序
+- **前端**: Vite 5 + React 18 + TypeScript 5 + Tailwind CSS 3
+- **路由**: React Router 6
+- **后端服务**: Supabase (Auth + Database + RLS + Edge Functions)
+- **AI Provider**: DeepSeek / OpenAI-compatible (BYOK) + 托管加密 (Edge Function 代理)
 
-AI 或开发者开始执行前，必须先阅读：
+## 快速启动
 
-1. `docs/roleplay-tavern/00_AI开发铁律与阶段执行提示词.md`
-2. `docs/roleplay-tavern/00C_V4.3变更说明_模糊项清理.md`
-3. `docs/roleplay-tavern/12_阶段路线_阶段0-10_最终明确版.md`
-4. `docs/roleplay-tavern/15_阶段化功能总清单_无未来池版.md`
-5. `docs/roleplay-tavern/16_所有后期建议阶段映射表_最终版.md`
-6. `docs/roleplay-tavern/19_阶段验收清单_阶段0-10.md`
+```bash
+# 1. 安装依赖
+npm install
 
-如果旧文档与 V4.3 路线冲突，以 V4.3 文件为准。
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY
 
-## 阶段完成定义
+# 3. 启动开发服务器
+npm run dev
 
-- 阶段 0-4：MVP 初版。
-- 阶段 5-6：角色扮演核心版。
-- 阶段 7-9：产品级完整版，阶段 9 完成即可视为核心产品封版。
-- 阶段 10：可选生态与商业化扩展。
+# 4. 构建生产版本
+npm run build
+```
 
-## 核心产品原则
+## 运行模式
 
-1. 访客只看 Demo，不写库，不调用真实 AI，不烧站主 API。
-2. 普通用户登录后使用自己的 API。
-3. 阶段 3 只做本地 BYOK；阶段 8 才做加密托管 API Key 与多设备同步。
-4. Owner 是站主最高权限；Admin 是运营管理者，不默认读取普通用户 private 聊天、记忆、context_runs、API credentials。
-5. 所有私有数据必须受 Auth + RLS + Repository 保护。
-6. 移动端按 App 体验设计，不复刻桌面三栏。
-7. 参考图片只作为风格和氛围参考，不要求 100% 复刻。
-8. 阶段 9 前所有重要功能必须落实；不允许把重要体验继续丢进“未来功能池”。
+| 模式 | 说明 |
+|------|------|
+| Demo 访客 | 不登录即可体验 Mock AI，不写库不调真实 API |
+| 用户登录 | 使用自己的 API Key（本地 BYOK 或托管加密） |
+| Admin | 运营管理（预留） |
+| Owner | 站主最高权限（预留） |
 
-## 目录说明
+## API 配置模式
 
-- `docs/roleplay-tavern/`：产品、架构、阶段、验收文档。
-- `docs/roleplay-tavern/assets/`：视觉风格参考图，只做风格参考。
-- `supabase/migrations/`：数据库迁移草案。
-- `.env.example`：环境变量模板。
+- **仅本次会话**: API Key 保存在内存中，关闭标签页后清除
+- **当前设备**: API Key 加密保存在浏览器 localStorage
+- **托管加密 / 跨设备同步**: API Key 在服务端 AES-GCM 加密保存，通过 Edge Function 代理调用，多设备自动同步
 
-## 执行方式
+## 项目结构
 
-每次只执行一个阶段：
+```
+src/
+  app/          App Shell + Router
+  pages/        9 个路由页面
+  features/
+    auth/       Supabase Auth + AuthProvider
+    roleplay/
+      providers/     Provider Gateway (Mock/DeepSeek/OpenAI)
+      hooks/         核心聊天 Hook (useChatSession)
+      components/    聊天 UI / Studio 编辑器 / Context Preview
+      repositories/  数据库访问层 (Repository 模式)
+      services/      数据管理 / 托管凭据服务
+      storage/       API Key 本地存储
+supabase/
+  migrations/   8 个 SQL 迁移文件 (0001-0008)
+  functions/    6 个 Edge Functions
+docs/
+  roleplay-tavern/  产品文档 / 阶段验收 / 执行记录
+```
 
-1. 读取本阶段文档。
-2. 输出阶段计划。
-3. 实现本阶段。
-4. 自检。
-5. 更新验收清单和进化记录。
-6. Git commit。
-7. 再进入下一阶段。
+## 文档索引
 
-不允许跳阶段，不允许用 Mock 冒充真实完成，不允许删除文档。
+- [部署上线指南](docs/roleplay-tavern/部署上线指南.md)
+- [用户使用指南](docs/roleplay-tavern/用户使用指南.md)
+- [阶段验收清单](docs/roleplay-tavern/19_阶段验收清单_阶段0-10.md)
+- [阶段路线](docs/roleplay-tavern/12_阶段路线_阶段0-10_最终明确版.md)
+
+## 开发约定
+
+- 组件不直接调用 Supabase，必须经过 Repository 层
+- API Key 不入库、不上传服务器（BYOK 模式）
+- Demo 模式不写库、不调用真实 AI
+- 不删除 docs/ supabase/ README.md .env.example

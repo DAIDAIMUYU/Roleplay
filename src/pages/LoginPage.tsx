@@ -57,7 +57,6 @@ export function LoginPage() {
 
     setBusy(true);
     setError(null);
-    console.info("[login] submit start");
 
     // 10-second timeout guard
     const timeoutId = setTimeout(() => {
@@ -82,7 +81,6 @@ export function LoginPage() {
       console.warn("[login] submit exception:", err);
       setError(translateError(String(err)));
     } finally {
-      console.info("[login] submit finally");
       setBusy(false);
     }
   }

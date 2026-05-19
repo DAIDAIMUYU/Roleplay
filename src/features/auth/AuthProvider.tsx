@@ -195,9 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) return { error: "Supabase 未配置" };
-    console.info("[Auth] signIn start");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    console.info("[Auth] signIn returned", error ? `error: ${error.message}` : "ok");
     return { error: error?.message };
   }, []);
 

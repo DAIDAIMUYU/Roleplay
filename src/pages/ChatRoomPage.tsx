@@ -406,6 +406,9 @@ export function ChatRoomPage() {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-ink-900">{chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天室"}</p>
           </div>
+          {providerConfig.storageMode === "hosted_encrypted" && (
+            <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管·非流式</span>
+          )}
           <ModeBadge />
           <button onClick={() => setShowMobileContext((value) => !value)} className="btn-ghost p-1.5 text-xs">
             <ChevronDown className="h-4 w-4" />
@@ -550,6 +553,9 @@ export function ChatRoomPage() {
             {chat.activeCharacter && <p className="truncate text-xs text-brand-500">{chat.activeCharacter.name}</p>}
           </div>
           <div className="flex items-center gap-2">
+            {providerConfig.storageMode === "hosted_encrypted" && (
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-700">托管模式 · 非流式</span>
+            )}
             {chat.saveStatus === "saving" && <span className="text-xs text-ink-300">保存中...</span>}
             {chat.saveStatus === "saved" && <span className="text-xs text-emerald-500">已保存</span>}
             {chat.saveStatus === "error" && <span className="text-xs text-rose-500">保存失败</span>}

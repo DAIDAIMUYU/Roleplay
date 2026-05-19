@@ -20,12 +20,11 @@ import { useAuth } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import {
   AVAILABLE_PROVIDERS,
-  buildConfigFromStorage,
-  testProviderConnection,
   type ApiKeyStorageMode,
   type ProviderType,
   type TestResult,
 } from "../features/roleplay/providers";
+import { buildConfigFromStorage, testProviderConnection } from "../features/roleplay/providers/providerGateway";
 import {
   clearApiKey,
   getStorageModeDescription,
@@ -328,7 +327,7 @@ function ApiProviderCard() {
       <div className={`rounded-card border px-3 py-2 ${storageMode === "hosted_encrypted" ? "bg-sky-50 border-sky-100" : "bg-amber-light/30 border-amber-100"}`}>
         <p className={`text-xs leading-relaxed ${storageMode === "hosted_encrypted" ? "text-sky-700" : "text-amber-700"}`}>
           {storageMode === "hosted_encrypted"
-            ? "API Key 将在服务端加密保存，用于多设备同步。保存后无法查看明文，只能测试、替换或删除。托管模式当前通过 Edge Function 代理请求，聊天回复为非流式。"
+            ? "API Key 将在服务端加密保存，用于多设备同步。保存后无法查看明文，只能测试、替换或删除。托管模式当前通过 Edge Function 代理请求，暂不支持逐字流式输出，回复会在生成完成后一次性显示。"
             : "当前 API Key 只保存在本次会话或当前设备浏览器中，不会上送服务端。"}
         </p>
       </div>

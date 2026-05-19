@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Brain, ChevronLeft, ChevronRight, Copy, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, ChevronLeft, ChevronRight, Copy, Edit3, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import type { ChatMessage } from "../../providers/provider.types";
 import type { MessageRevisionRow } from "../../types/database";
 
@@ -34,6 +34,20 @@ export function MessageBubble({
   const isSystem = message.role === "system";
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [loadingRevisions, setLoadingRevisions] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    }
+    if (mobileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [mobileMenuOpen]);
 
   const loadedVersions = useMemo(() => {
     const sorted = [...(revisions ?? [])].sort((a, b) => a.revision_no - b.revision_no);
@@ -86,7 +100,7 @@ export function MessageBubble({
   return (
     <div className={`group mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+        className={`relative max-w-[80%] rounded-2xl px-4 py-2.5 ${
           isUser
             ? "rounded-br-md bg-brand-500 text-white"
             : "rounded-bl-md border border-surface-100 bg-white shadow-sm"
@@ -112,43 +126,127 @@ export function MessageBubble({
         </p>
 
         {!isStreaming && (
-          <div
-            className={`mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ${
-              isUser ? "justify-end" : "justify-start"
-            }`}
-          >
-            {hasVersions && (
-              <div className={`mr-1 flex items-center gap-0.5 ${isUser ? "text-white/70" : "text-ink-400"}`}>
-                <VersionButton
-                  direction="left"
-                  disabled={atFirst || loadingRevisions}
-                  isUser={isUser}
-                  onClick={() => void moveVersion(-1)}
-                />
-                <span className="min-w-[2.75rem] select-none text-center text-[10px] leading-none">
-                  {safeVersionIndex + 1} / {totalVersions}
-                </span>
-                <VersionButton
-                  direction="right"
-                  disabled={atLast || loadingRevisions}
-                  isUser={isUser}
-                  onClick={() => void moveVersion(1)}
-                />
+          <>
+            {/* Desktop: hover-based action bar */}
+            <div
+              className={`hidden md:flex mt-1.5 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ${
+                isUser ? "justify-end" : "justify-start"
+              }`}
+            >
+              {hasVersions && (
+                <div className={`mr-1 flex items-center gap-0.5 ${isUser ? "text-white/70" : "text-ink-400"}`}>
+                  <VersionButton
+                    direction="left"
+                    disabled={atFirst || loadingRevisions}
+                    isUser={isUser}
+                    onClick={() => void moveVersion(-1)}
+                  />
+                  <span className="min-w-[2.75rem] select-none text-center text-[10px] leading-none">
+                    {safeVersionIndex + 1} / {totalVersions}
+                  </span>
+                  <VersionButton
+                    direction="right"
+                    disabled={atLast || loadingRevisions}
+                    isUser={isUser}
+                    onClick={() => void moveVersion(1)}
+                  />
+                </div>
+              )}
+
+              <ActionBtn icon={<Copy className="h-3 w-3" />} title="复制" onClick={onCopy} isUser={isUser} />
+              {!isUser && onRegenerate && (
+                <ActionBtn icon={<RotateCcw className="h-3 w-3" />} title="重新生成" onClick={onRegenerate} isUser={isUser} />
+              )}
+              {isUser && onEdit && (
+                <ActionBtn icon={<Edit3 className="h-3 w-3" />} title="编辑" onClick={onEdit} isUser={isUser} />
+              )}
+              {onExtractMemory && (
+                <ActionBtn icon={<Brain className="h-3 w-3" />} title="提炼记忆" onClick={onExtractMemory} isUser={isUser} />
+              )}
+              <ActionBtn icon={<Trash2 className="h-3 w-3" />} title="删除" onClick={onDelete} isUser={isUser} />
+            </div>
+
+            {/* Mobile: version arrows + "⋯" menu button */}
+            <div className={`flex md:hidden mt-1.5 items-center gap-1 ${isUser ? "justify-end" : "justify-start"}`}>
+              {hasVersions && (
+                <div className={`mr-1 flex items-center gap-0.5 ${isUser ? "text-white/70" : "text-ink-400"}`}>
+                  <VersionButton
+                    direction="left"
+                    disabled={atFirst || loadingRevisions}
+                    isUser={isUser}
+                    onClick={() => void moveVersion(-1)}
+                  />
+                  <span className="min-w-[2.75rem] select-none text-center text-[10px] leading-none">
+                    {safeVersionIndex + 1} / {totalVersions}
+                  </span>
+                  <VersionButton
+                    direction="right"
+                    disabled={atLast || loadingRevisions}
+                    isUser={isUser}
+                    onClick={() => void moveVersion(1)}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setMobileMenuOpen((v) => !v); }}
+                className={`rounded p-1 transition-colors ${
+                  isUser
+                    ? "text-white/60 hover:bg-white/10 hover:text-white"
+                    : "text-ink-300 hover:bg-surface-100 hover:text-ink-500"
+                }`}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Mobile menu popover */}
+            {mobileMenuOpen && (
+              <div
+                ref={menuRef}
+                className={`absolute z-40 mt-1 w-44 rounded-xl border border-surface-200 bg-white py-1.5 shadow-elevated md:hidden ${
+                  isUser ? "right-0" : "left-0"
+                }`}
+                style={{ top: "100%" }}
+              >
+                {hasVersions && (
+                  <>
+                    <div className="flex items-center justify-between px-3 py-1.5">
+                      <span className="text-[11px] text-ink-400">版本切换</span>
+                      <span className="text-[10px] text-ink-300">{safeVersionIndex + 1} / {totalVersions}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 px-3 py-1">
+                      <VersionButton
+                        direction="left"
+                        disabled={atFirst || loadingRevisions}
+                        isUser={false}
+                        onClick={() => void moveVersion(-1)}
+                      />
+                      <span className="text-[10px] text-ink-400">上一版 / 下一版</span>
+                      <VersionButton
+                        direction="right"
+                        disabled={atLast || loadingRevisions}
+                        isUser={false}
+                        onClick={() => void moveVersion(1)}
+                      />
+                    </div>
+                    <div className="my-1 border-t border-surface-100" />
+                  </>
+                )}
+                <MobileMenuItem icon={<Copy className="h-3.5 w-3.5" />} label="复制" onClick={() => { onCopy?.(); setMobileMenuOpen(false); }} />
+                {isUser && onEdit && (
+                  <MobileMenuItem icon={<Edit3 className="h-3.5 w-3.5" />} label="编辑" onClick={() => { onEdit(); setMobileMenuOpen(false); }} />
+                )}
+                {!isUser && onRegenerate && (
+                  <MobileMenuItem icon={<RotateCcw className="h-3.5 w-3.5" />} label="重新生成" onClick={() => { onRegenerate(); setMobileMenuOpen(false); }} />
+                )}
+                {onExtractMemory && (
+                  <MobileMenuItem icon={<Brain className="h-3.5 w-3.5" />} label="提炼记忆" onClick={() => { onExtractMemory(); setMobileMenuOpen(false); }} />
+                )}
+                <MobileMenuItem icon={<Trash2 className="h-3.5 w-3.5" />} label="删除" onClick={() => { onDelete?.(); setMobileMenuOpen(false); }} />
               </div>
             )}
-
-            <ActionBtn icon={<Copy className="h-3 w-3" />} title="复制" onClick={onCopy} isUser={isUser} />
-            {!isUser && onRegenerate && (
-              <ActionBtn icon={<RotateCcw className="h-3 w-3" />} title="重新生成" onClick={onRegenerate} isUser={isUser} />
-            )}
-            {isUser && onEdit && (
-              <ActionBtn icon={<Edit3 className="h-3 w-3" />} title="编辑" onClick={onEdit} isUser={isUser} />
-            )}
-            {onExtractMemory && (
-              <ActionBtn icon={<Brain className="h-3 w-3" />} title="提炼记忆" onClick={onExtractMemory} isUser={isUser} />
-            )}
-            <ActionBtn icon={<Trash2 className="h-3 w-3" />} title="删除" onClick={onDelete} isUser={isUser} />
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -211,6 +309,27 @@ function ActionBtn({
       }`}
     >
       {icon}
+    </button>
+  );
+}
+
+function MobileMenuItem({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-ink-600 transition-colors hover:bg-surface-50"
+    >
+      <span className="flex-shrink-0 text-ink-400">{icon}</span>
+      <span>{label}</span>
     </button>
   );
 }
