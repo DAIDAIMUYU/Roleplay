@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
-  Cloud,
   Database,
   HardDrive,
   Info,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
+import { DataSyncPanel } from "../features/roleplay/components/settings/DataSyncPanel";
 import {
   AVAILABLE_PROVIDERS,
   type ApiKeyStorageMode,
@@ -804,16 +804,7 @@ export function SettingsPage() {
           status="本地可用"
           to="/settings/data"
         />
-        <SectionCard
-          icon={<Cloud className="h-5 w-5" />}
-          title="数据同步"
-          description={
-            user
-              ? "当前账号已开启云端同步模式。后续同步中心会提供本地/云端差异检查、上传本地数据和下载云端数据。"
-              : "登录只是为了开启云端同步和多设备互通。你也可以一直只使用本地模式。"
-          }
-          status={user ? "云端同步" : "需要登录"}
-        />
+        <DataSyncPanel userId={user?.id ?? null} isLoggedIn={!!user} />
         <SectionCard
           icon={<HardDrive className="h-5 w-5" />}
           title="本地存储"
