@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Settings,
   User,
@@ -440,7 +441,22 @@ export function SettingsPage() {
         <h3 className="text-sm font-semibold text-ink-500 uppercase tracking-wide px-1">
           其他设置
         </h3>
-        {otherSections.map(({ icon, title, desc, stage }) => (
+        <Link
+          to="/settings/data"
+          className="card flex items-start gap-4 hover:bg-surface-50 transition-colors"
+        >
+          <div className="h-9 w-9 rounded-lg bg-surface-100 text-ink-400 flex items-center justify-center flex-shrink-0">
+            <Database className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-ink-700">数据管理</h3>
+            <p className="text-xs text-ink-300 mt-0.5">备份、恢复、导入、导出、回收站</p>
+          </div>
+          <span className="text-xs text-ink-200 bg-surface-50 rounded-full px-2 py-0.5 flex-shrink-0">
+            阶段 8
+          </span>
+        </Link>
+        {otherSections.filter((_, index) => index !== 1).map(({ icon, title, desc, stage }) => (
           <div
             key={title}
             className="card flex items-start gap-4 hover:bg-surface-50 transition-colors"
