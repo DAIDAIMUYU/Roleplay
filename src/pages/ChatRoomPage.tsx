@@ -398,7 +398,7 @@ export function ChatRoomPage() {
         <EmptyState
           icon={<MessageCircle className="h-10 w-10" />}
           title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"}
-          description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "网页本地模式使用本地预览回复" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先配置 API Key"}
+          description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "本地模式 · 使用本地预览回复" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先在设置中心启用 API 配置"}
         />
       ) : (
         chat.messages.map((message, index) => renderMessageBubble(message, index))
@@ -409,7 +409,7 @@ export function ChatRoomPage() {
 
   if (isMobile) {
     return (
-      <div className="flex h-dvh flex-col bg-surface-50">
+      <div className="flex h-dvh flex-col bg-surface-50 pb-safe-bottom">
         <div className="flex items-center gap-2 border-b border-surface-100 bg-white px-3 py-2.5">
           <button onClick={() => setShowMobileSessions((value) => !value)} className="btn-ghost p-1.5 text-xs">
             <Drama className="h-4 w-4" />
@@ -517,7 +517,7 @@ export function ChatRoomPage() {
           onStop={chat.stopGeneration}
           isStreaming={chat.isStreaming}
           disabled={!hasActiveSession || (!chat.isDemo && !chat.apiConfigured)}
-          placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先配置 API Key..." : "输入消息..."}
+          placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息..."}
         />
 
         {memoryDrafts && (
@@ -597,7 +597,7 @@ export function ChatRoomPage() {
         {!chat.isDemo && !chat.apiConfigured && (
           <div className="flex items-center gap-2 border-t bg-amber-light px-4 py-2">
             <WifiOff className="h-4 w-4 text-amber-500" />
-            <p className="flex-1 text-xs text-amber-700">请先在设置中心配置 API Key</p>
+            <p className="flex-1 text-xs text-amber-700">请先在设置中心启用 API 配置</p>
             <Link to="/settings" className="btn-ghost text-xs text-amber-700">
               <Settings className="h-3 w-3" />
               去设置
@@ -633,7 +633,7 @@ export function ChatRoomPage() {
           onStop={chat.stopGeneration}
           isStreaming={chat.isStreaming}
           disabled={!hasActiveSession || (!chat.isDemo && !chat.apiConfigured)}
-          placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心配置 API Key..." : "输入消息... (Enter 发送，Shift+Enter 换行)"}
+          placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息... (Enter 发送，Shift+Enter 换行)"}
         />
       </div>
 

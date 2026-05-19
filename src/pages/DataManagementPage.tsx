@@ -185,7 +185,7 @@ export function DataManagementPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 md:py-12 space-y-6">
+    <div className="max-w-5xl mx-auto px-4 py-8 pb-24 md:py-12 md:pb-12 space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to="/settings" className="btn-ghost text-xs">

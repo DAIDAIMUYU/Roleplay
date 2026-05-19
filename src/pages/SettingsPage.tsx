@@ -80,7 +80,7 @@ export function SettingsPage() {
   const currentCredential = getCurrentCredentialSummary();
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 md:py-12">
+    <div className="mx-auto max-w-4xl px-4 py-8 pb-24 md:py-12 md:pb-12">
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-ink-100 text-ink-500">
           <Settings className="h-5 w-5" />
@@ -171,8 +171,8 @@ export function SettingsPage() {
       </div>
 
       {isGuestOrDemo ? (
-        <div className="mt-6 rounded-card border border-amber-100 bg-amber-light/20 px-4 py-3 text-xs leading-relaxed text-amber-800">
-          你当前处于网页本地模式。现在就可以继续浏览、预览和配置本地 API；登录后才会开启云端同步与托管加密凭据。
+        <div className="mt-6 mb-20 rounded-card border border-amber-100 bg-amber-light/20 px-4 py-3 text-xs leading-relaxed text-amber-800 md:mb-0">
+          当前处于网页本地模式。登录后可开启云端同步与托管加密凭据。
         </div>
       ) : null}
     </div>

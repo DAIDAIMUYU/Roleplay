@@ -98,7 +98,7 @@ export function StudioPage() {
   const activeWb = wbs.worldbooks.find((worldbook) => worldbook.id === wbs.activeWorldbookId) ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 md:py-12">
+    <div className="mx-auto max-w-5xl px-4 py-8 pb-24 md:py-12 md:pb-12">
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-50 text-sky-500">
           <Palette className="h-5 w-5" />

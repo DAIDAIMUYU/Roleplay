@@ -97,7 +97,7 @@ export function buildCharacterSystemPrompt(
   const templateWithVars = templateContent
     .replace(/\{\{character_name\}\}/g, c.name)
     .replace(/\{\{user_name\}\}/g, card.user_nickname || "用户")
-    .replace(/\{\{current_scene\}\}/g, "（当前场景将在后续阶段动态注入）")
+    .replace(/\{\{current_scene\}\}/g, "（当前场景 — 可在设置中编辑会话摘要来记录）")
     .replace(/\{\{relationship_stage\}\}/g, card.relationship_stage || "未设定")
     .replace(/\{\{speaking_style\}\}/g, card.speaking_style || "自然对话")
     .replace(/\{\{greeting\}\}/g, card.greeting || "");

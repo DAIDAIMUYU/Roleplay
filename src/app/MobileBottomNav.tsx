@@ -3,7 +3,7 @@ import { Home, Drama, Palette, Settings } from "lucide-react";
 import { useAuth, canAccessAdminPanel } from "../features/auth";
 
 const tabs = [
-  { to: "/", label: "大厅", icon: Home },
+  { to: "/", label: "首页", icon: Home },
   { to: "/roleplay", label: "聊天", icon: Drama },
   { to: "/studio", label: "工坊", icon: Palette },
   { to: "/settings", label: "设置", icon: Settings },

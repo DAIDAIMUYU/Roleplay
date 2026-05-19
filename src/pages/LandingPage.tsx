@@ -69,7 +69,7 @@ export function LandingPage() {
   const apiState = getApiCredentialState();
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 md:py-14">
+    <div className="mx-auto max-w-5xl px-4 py-8 pb-24 md:py-14 md:pb-14">
       <div className="mb-10 text-center">
         <div className="mb-3 inline-flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500">
@@ -102,17 +102,17 @@ export function LandingPage() {
           </div>
           <div className="grid gap-2 text-xs text-ink-400 sm:grid-cols-3">
             <div className="rounded-card bg-surface-50 p-2">
-              <span className="font-medium text-ink-600">Web Mode</span>
+              <span className="font-medium text-ink-600">网页模式</span>
               <br />
               当前可用
             </div>
             <div className="rounded-card bg-surface-50 p-2">
-              <span className="font-medium text-ink-600">Desktop Mode</span>
+              <span className="font-medium text-ink-600">桌面模式</span>
               <br />
               暂未推出
             </div>
             <div className="rounded-card bg-surface-50 p-2">
-              <span className="font-medium text-ink-600">Mobile App Mode</span>
+              <span className="font-medium text-ink-600">移动 App</span>
               <br />
               暂未推出
             </div>
@@ -170,8 +170,8 @@ export function LandingPage() {
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-amber-50 text-amber-500">
             <Sparkles className="h-4 w-4" />
           </div>
-          <span className="text-sm font-medium text-ink-700">进入本地模式</span>
-          <span className="mt-0.5 text-xs text-ink-300">先开始聊天与预览</span>
+          <span className="text-sm font-medium text-ink-700">进入聊天</span>
+          <span className="mt-0.5 text-xs text-ink-300">无需登录即可开始</span>
         </Link>
 
         <Link to="/studio" className="card-hover flex flex-col items-center p-4 text-center">

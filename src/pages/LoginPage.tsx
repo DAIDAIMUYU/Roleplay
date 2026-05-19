@@ -206,7 +206,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh px-4 py-12">
+    <div className="min-h-dvh px-4 py-12 pb-24 md:pb-12">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-500">

@@ -52,7 +52,7 @@ export function ProviderConfigCard({
             <ProviderStatusDot status={config.testStatus} showLabel />
             {enabledBadge}
           </div>
-          <p className="mt-1 text-xs text-ink-400">
+          <p className="mt-1 text-xs text-ink-400 break-all line-clamp-1">
             {providerName} / {config.model || "未选择模型"} · {storageLabel}
             {config.storageMode === "hosted_encrypted" && config.credentialId
               ? " · 托管凭据"

@@ -10,6 +10,7 @@ import * as LocalMirror from "../repositories/localMirror";
 import type { CharacterRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
 import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
+import { getPresetName } from "../providers/providerPresets";
 
 export interface SessionLike {
   id: string;
@@ -1552,10 +1553,10 @@ export function useChatSession(
     state.worldbookIds.join("|"),
   ]);
 
-  const providerLabel = isDemo ? "Mock (Demo)" : storedProvider === "deepseek" ? "DeepSeek" : "OpenAI Compatible";
-  const modelLabel = isDemo ? "mock" : state.model;
+  const providerLabel = isDemo ? "本地预览" : storedProvider === "deepseek" ? "DeepSeek" : getPresetName(storedProvider);
+  const modelLabel = isDemo ? "本地预览回复" : state.model;
   const runtimeMode = isDemo
-    ? "local_mock_preview"
+    ? "local_preview"
     : storageMode === "hosted_encrypted"
       ? "hosted_encrypted"
       : storageMode === "local_device"
