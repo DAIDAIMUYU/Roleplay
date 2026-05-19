@@ -91,8 +91,13 @@ export interface BranchRow {
   session_id: string;
   user_id: string;
   name: string;
+  title: string | null;
+  parent_branch_id: string | null;
   from_message_id: string | null;
+  forked_from_message_id: string | null;
+  status: "active" | "archived" | "merged";
   created_at: string;
+  updated_at: string;
 }
 
 export interface SessionParticipantRow {
@@ -122,7 +127,20 @@ export interface MessageRow {
   token_count: number | null;
   hidden: boolean;
   deleted_at: string | null;
+  deleted_reason: string | null;
+  edited_at: string | null;
+  revision_no: number;
+  superseded_by_message_id: string | null;
   created_at: string;
+}
+
+export interface MessageRevisionRow {
+  id: string;
+  message_id: string;
+  user_id: string;
+  revision_no: number;
+  content_text: string;
+  edited_at: string;
 }
 
 export interface PromptTemplateRow {
@@ -135,6 +153,8 @@ export interface PromptTemplateRow {
   tags: string[];
   visibility: Visibility;
   is_favorite: boolean;
+  deleted_at: string | null;
+  deleted_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -147,6 +167,8 @@ export interface WorldbookRow {
   description: string | null;
   tags: string[];
   visibility: Visibility;
+  deleted_at: string | null;
+  deleted_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -165,6 +187,8 @@ export interface WorldbookEntryRow {
   token_estimate: number | null;
   last_triggered_at: string | null;
   trigger_count: number;
+  deleted_at: string | null;
+  deleted_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -188,6 +212,8 @@ export interface MemoryRow {
   salience: number;
   status: "suggested" | "active" | "disabled" | "deleted";
   last_used_at: string | null;
+  deleted_at: string | null;
+  deleted_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -196,7 +222,9 @@ export interface ContextRunRow {
   id: string;
   user_id: string;
   session_id: string;
+  branch_id: string | null;
   message_id: string | null;
+  trigger_message_id: string | null;
   provider: string | null;
   model: string | null;
   input_tokens: number | null;
@@ -206,6 +234,14 @@ export interface ContextRunRow {
   cost_usd: number | null;
   components_json: unknown[];
   dropped_json: unknown[];
+  system_prompt: string | null;
+  provider_messages_json: unknown | null;
+  worldbook_hits_json: unknown | null;
+  skipped_entries_json: unknown | null;
+  injected_memories_json: unknown | null;
+  summary_text: string | null;
+  token_budget: number | null;
+  estimated_tokens: number | null;
   debug_enabled: boolean;
   created_at: string;
 }

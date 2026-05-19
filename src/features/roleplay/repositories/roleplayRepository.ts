@@ -5,6 +5,7 @@ import type {
   SessionRow,
   BranchRow,
   MessageRow,
+  MessageRevisionRow,
   PromptTemplateRow,
   WorldbookRow,
   WorldbookEntryRow,
@@ -412,12 +413,99 @@ export async function deleteMessage(
   supabase: SupabaseClient,
   messageId: string,
   userId: string,
+  reason?: string,
 ): Promise<void> {
   await supabase
     .from("messages")
-    .update({ deleted_at: new Date().toISOString() })
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_reason: reason ?? null,
+    })
     .eq("id", messageId)
     .eq("user_id", userId);
+}
+
+export async function updateMessage(
+  supabase: SupabaseClient,
+  messageId: string,
+  userId: string,
+  input: { content_text: string; edited_at?: string; revision_no?: number },
+): Promise<MessageRow | null> {
+  const { data } = await supabase
+    .from("messages")
+    .update(input)
+    .eq("id", messageId)
+    .eq("user_id", userId)
+    .select()
+    .single();
+  return data as MessageRow | null;
+}
+
+export async function supersedeMessages(
+  supabase: SupabaseClient,
+  messageIds: string[],
+  supersededBy: string,
+  userId: string,
+): Promise<void> {
+  if (messageIds.length === 0) return;
+  await supabase
+    .from("messages")
+    .update({ superseded_by_message_id: supersededBy })
+    .in("id", messageIds)
+    .eq("user_id", userId);
+}
+
+export async function createMessageRevision(
+  supabase: SupabaseClient,
+  userId: string,
+  input: { message_id: string; revision_no: number; content_text: string },
+): Promise<MessageRevisionRow | null> {
+  const { data } = await supabase
+    .from("message_revisions")
+    .insert({ ...input, user_id: userId })
+    .select()
+    .single();
+  return data as MessageRevisionRow | null;
+}
+
+export async function listMessageRevisions(
+  supabase: SupabaseClient,
+  messageId: string,
+): Promise<MessageRevisionRow[]> {
+  const { data } = await supabase
+    .from("message_revisions")
+    .select("*")
+    .eq("message_id", messageId)
+    .order("revision_no", { ascending: true });
+  return (data as MessageRevisionRow[]) ?? [];
+}
+
+export async function loadMessageRevisions(
+  supabase: SupabaseClient,
+  messageId: string,
+): Promise<MessageRevisionRow[]> {
+  return listMessageRevisions(supabase, messageId);
+}
+
+export async function getMessageRevisionCounts(
+  supabase: SupabaseClient,
+  messageIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (messageIds.length === 0) return counts;
+
+  const { data, error } = await supabase
+    .from("message_revisions")
+    .select("message_id")
+    .in("message_id", messageIds);
+
+  if (error) throw error;
+
+  (data as Array<{ message_id: string }> | null)?.forEach((row) => {
+    counts.set(row.message_id, (counts.get(row.message_id) ?? 0) + 1);
+  });
+
+  return counts;
 }
 
 export async function clearSessionMessages(
@@ -443,8 +531,127 @@ export async function listBranches(
     .from("branches")
     .select("*")
     .eq("session_id", sessionId)
+    .eq("status", "active")
     .order("created_at", { ascending: true });
   return (data as BranchRow[]) ?? [];
+}
+
+export async function getActiveBranch(
+  supabase: SupabaseClient,
+  sessionId: string,
+  userId: string,
+): Promise<BranchRow | null> {
+  // First get session's active_branch_id
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("active_branch_id")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .single();
+
+  if (session?.active_branch_id) {
+    const { data: branch } = await supabase
+      .from("branches")
+      .select("*")
+      .eq("id", session.active_branch_id)
+      .single();
+    return (branch as BranchRow) ?? null;
+  }
+  return null;
+}
+
+export async function createBranch(
+  supabase: SupabaseClient,
+  userId: string,
+  input: {
+    session_id: string;
+    name: string;
+    title?: string;
+    parent_branch_id?: string;
+    forked_from_message_id?: string;
+  },
+): Promise<BranchRow | null> {
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from("branches")
+    .insert({
+      session_id: input.session_id,
+      user_id: userId,
+      name: input.name,
+      title: input.title ?? input.name,
+      parent_branch_id: input.parent_branch_id ?? null,
+      forked_from_message_id: input.forked_from_message_id ?? null,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single();
+  return data as BranchRow | null;
+}
+
+export async function ensureDefaultBranch(
+  supabase: SupabaseClient,
+  sessionId: string,
+  userId: string,
+): Promise<BranchRow | null> {
+  // Check if session already has active branch
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("active_branch_id")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .single();
+
+  if (session?.active_branch_id) {
+    const { data: branch } = await supabase
+      .from("branches")
+      .select("*")
+      .eq("id", session.active_branch_id)
+      .single();
+    if (branch) return branch as BranchRow;
+  }
+
+  // Check for any existing branch
+  const existing = await listBranches(supabase, sessionId);
+  if (existing.length > 0) {
+    await supabase
+      .from("sessions")
+      .update({ active_branch_id: existing[0].id })
+      .eq("id", sessionId)
+      .eq("user_id", userId);
+    return existing[0];
+  }
+
+  // Create default branch
+  const branch = await createBranch(supabase, userId, {
+    session_id: sessionId,
+    name: "main",
+    title: "主线",
+  });
+
+  if (branch) {
+    await supabase
+      .from("sessions")
+      .update({ active_branch_id: branch.id })
+      .eq("id", sessionId)
+      .eq("user_id", userId);
+  }
+
+  return branch;
+}
+
+export async function setActiveBranch(
+  supabase: SupabaseClient,
+  sessionId: string,
+  branchId: string,
+  userId: string,
+): Promise<void> {
+  await supabase
+    .from("sessions")
+    .update({ active_branch_id: branchId })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
 }
 
 // ---------- prompt templates ----------
@@ -453,7 +660,7 @@ export async function listPromptTemplates(
   supabase: SupabaseClient,
   userId?: string,
 ): Promise<PromptTemplateRow[]> {
-  let query = supabase.from("prompt_templates").select("*");
+  let query = supabase.from("prompt_templates").select("*").is("deleted_at", null);
   if (userId) {
     query = query.eq("user_id", userId);
   }
@@ -509,7 +716,13 @@ export async function deletePromptTemplate(
   supabase: SupabaseClient,
   templateId: string,
 ): Promise<void> {
-  await supabase.from("prompt_templates").delete().eq("id", templateId);
+  await supabase
+    .from("prompt_templates")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_reason: "user_deleted",
+    })
+    .eq("id", templateId);
 }
 
 // ---------- worldbooks ----------
@@ -522,6 +735,7 @@ export async function listWorldbooks(
     .from("worldbooks")
     .select("*")
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   return (data as WorldbookRow[]) ?? [];
 }
@@ -560,7 +774,17 @@ export async function deleteWorldbook(
   supabase: SupabaseClient,
   worldbookId: string,
 ): Promise<void> {
-  await supabase.from("worldbooks").delete().eq("id", worldbookId);
+  const now = new Date().toISOString();
+  // Soft-delete worldbook entries first, then the worldbook itself
+  await supabase
+    .from("worldbook_entries")
+    .update({ deleted_at: now, deleted_reason: "worldbook_deleted" })
+    .eq("worldbook_id", worldbookId)
+    .is("deleted_at", null);
+  await supabase
+    .from("worldbooks")
+    .update({ deleted_at: now, deleted_reason: "user_deleted" })
+    .eq("id", worldbookId);
 }
 
 // ---------- worldbook entries ----------
@@ -583,6 +807,7 @@ export async function listAllWorldbookEntries(
     .from("worldbook_entries")
     .select("*")
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .order("priority", { ascending: false });
   return (data as WorldbookEntryRow[]) ?? [];
 }
@@ -595,6 +820,7 @@ export async function listWorldbookEntries(
     .from("worldbook_entries")
     .select("*")
     .eq("worldbook_id", worldbookId)
+    .is("deleted_at", null)
     .order("priority", { ascending: false });
   return (data as WorldbookEntryRow[]) ?? [];
 }
@@ -630,7 +856,11 @@ export async function deleteWorldbookEntry(
   supabase: SupabaseClient,
   entryId: string,
 ): Promise<void> {
-  await supabase.from("worldbook_entries").delete().eq("id", entryId);
+  const now = new Date().toISOString();
+  await supabase
+    .from("worldbook_entries")
+    .update({ deleted_at: now, deleted_reason: "user_deleted" })
+    .eq("id", entryId);
 }
 
 // ---------- memories ----------
@@ -654,6 +884,7 @@ export async function listAllActiveMemories(
     .select("*")
     .eq("user_id", userId)
     .eq("status", "active")
+    .is("deleted_at", null)
     .order("salience", { ascending: false });
   return (data as MemoryRow[]) ?? [];
 }
@@ -667,6 +898,7 @@ export async function listMemories(
     .from("memories")
     .select("*")
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .neq("status", "deleted")
     .order("updated_at", { ascending: false });
 
@@ -712,9 +944,10 @@ export async function deleteMemory(
   memoryId: string,
   userId: string,
 ): Promise<void> {
+  const now = new Date().toISOString();
   await supabase
     .from("memories")
-    .update({ status: "deleted" })
+    .update({ status: "deleted", deleted_at: now, deleted_reason: "user_deleted" })
     .eq("id", memoryId)
     .eq("user_id", userId);
 }
@@ -796,6 +1029,56 @@ export async function createContextRun(
   const { data } = await supabase
     .from("context_runs")
     .insert({ user_id: userId, session_id: sessionId })
+    .select()
+    .single();
+  return data as ContextRunRow | null;
+}
+
+export interface SaveContextRunInput {
+  session_id: string;
+  branch_id?: string | null;
+  message_id?: string | null;
+  trigger_message_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  system_prompt?: string | null;
+  provider_messages_json?: unknown;
+  worldbook_hits_json?: unknown;
+  skipped_entries_json?: unknown;
+  injected_memories_json?: unknown;
+  summary_text?: string | null;
+  token_budget?: number | null;
+  estimated_tokens?: number | null;
+  debug_enabled?: boolean;
+}
+
+export async function saveContextRun(
+  supabase: SupabaseClient,
+  userId: string,
+  input: SaveContextRunInput,
+): Promise<ContextRunRow | null> {
+  const { data } = await supabase
+    .from("context_runs")
+    .insert({
+      user_id: userId,
+      session_id: input.session_id,
+      branch_id: input.branch_id ?? null,
+      message_id: input.message_id ?? null,
+      trigger_message_id: input.trigger_message_id ?? null,
+      provider: input.provider ?? null,
+      model: input.model ?? null,
+      system_prompt: input.system_prompt ?? null,
+      provider_messages_json: input.provider_messages_json ?? null,
+      worldbook_hits_json: input.worldbook_hits_json ?? null,
+      skipped_entries_json: input.skipped_entries_json ?? null,
+      injected_memories_json: input.injected_memories_json ?? null,
+      summary_text: input.summary_text ?? null,
+      token_budget: input.token_budget ?? null,
+      estimated_tokens: input.estimated_tokens ?? null,
+      debug_enabled: input.debug_enabled ?? false,
+      components_json: [],
+      dropped_json: [],
+    })
     .select()
     .single();
   return data as ContextRunRow | null;

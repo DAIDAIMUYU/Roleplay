@@ -26,6 +26,8 @@ interface ContextPreviewProps {
   disabledWbIds: string[];
   disabledMemIds: string[];
   summaryEnabled: boolean;
+  activeBranchName?: string | null;
+  contextRunSaveStatus?: "idle" | "saved" | "failed" | null;
   onAddTemplate: (id: string) => Promise<void>;
   onRemoveTemplate: () => Promise<void>;
   onAddWorldbooks: (ids: string[]) => Promise<void>;
@@ -89,6 +91,8 @@ export function ContextPreview(props: ContextPreviewProps) {
     disabledWbIds,
     disabledMemIds,
     summaryEnabled,
+    activeBranchName,
+    contextRunSaveStatus,
     onAddTemplate,
     onRemoveTemplate,
     onAddWorldbooks,
@@ -168,6 +172,7 @@ export function ContextPreview(props: ContextPreviewProps) {
 
   const statusRows = [
     { label: "会话", value: sessionTitle || "未选择", icon: <Cpu className="h-4 w-4" /> },
+    { label: "分支", value: activeBranchName || "主线", icon: <ListTree className="h-4 w-4" /> },
     { label: "Provider", value: providerLabel, icon: <Cpu className="h-4 w-4" /> },
     { label: "模型", value: modelLabel, icon: <Zap className="h-4 w-4" /> },
     { label: "运行", value: runtimeMode, icon: <Cpu className="h-4 w-4" /> },
@@ -307,6 +312,14 @@ export function ContextPreview(props: ContextPreviewProps) {
 
         <Collapse title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length}命中` : "预览"}>
           <div className="text-xs text-ink-400 space-y-2 pb-1">
+            {contextRunSaveStatus !== null && (
+              <div>
+                <p className="font-medium text-ink-500">Context Run 持久化</p>
+                <p className={contextRunSaveStatus === "saved" ? "text-emerald-500" : contextRunSaveStatus === "failed" ? "text-rose-500" : "text-ink-300"}>
+                  {contextRunSaveStatus === "saved" ? "已保存" : contextRunSaveStatus === "failed" ? "保存失败" : "保存中..."}
+                </p>
+              </div>
+            )}
             <div>
               <p className="font-medium text-ink-500">已添加的世界书</p>
               <p>{worldbookIds.length ? worldbookIds.map((id) => wbNames.get(id) || id.slice(0, 8)).join("、") : "无"}</p>

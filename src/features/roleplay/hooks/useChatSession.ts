@@ -6,7 +6,7 @@ import { buildConfigFromStorage, sendProviderStreamRequest } from "../providers/
 import { loadApiKey } from "../storage/apiKeyStorage";
 import * as Repo from "../repositories/roleplayRepository";
 import { createDemoSession, getDefaultDemoSession } from "../mock/demoData";
-import type { CharacterRow, PromptTemplateRow, SessionRow } from "../types/database";
+import type { CharacterRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
 import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
 
@@ -41,6 +41,13 @@ export interface ChatState {
   disabledMemIds: string[];
   summaryEnabled: boolean;
   summaryText: string;
+  activeBranchId: string | null;
+  activeBranchName: string | null;
+  contextRunSaveStatus: "idle" | "saved" | "failed" | null;
+  messageDbIds: Map<number, string>;
+  messageRevisions: Map<string, MessageRevisionRow[]>;
+  messageRevisionCounts: Map<string, number>;
+  editedIndices: Set<number>;
 }
 
 export interface ChatActions {
@@ -51,7 +58,7 @@ export interface ChatActions {
   stopGeneration: () => void;
   regenerateLast: () => Promise<void>;
   editAndResend: (mi: number, nt: string) => Promise<void>;
-  deleteMessage: (mi: number) => void;
+  deleteMessage: (mi: number) => Promise<void>;
   copyMessage: (mi: number) => void;
   retry: () => Promise<void>;
   addTemplate: (id: string) => Promise<void>;
@@ -65,6 +72,7 @@ export interface ChatActions {
   saveSummary: (text: string) => Promise<void>;
   clearSummary: () => Promise<void>;
   generateSummary: () => Promise<string | null>;
+  loadMessageRevisions: (messageIndex: number) => Promise<MessageRevisionRow[]>;
   isDemo: boolean;
   apiConfigured: boolean;
   providerLabel: string;
@@ -127,6 +135,13 @@ export function useChatSession(
     disabledMemIds: [],
     summaryEnabled: false,
     summaryText: "",
+    activeBranchId: null,
+    activeBranchName: null,
+    contextRunSaveStatus: null,
+    messageDbIds: new Map(),
+    messageRevisions: new Map(),
+    messageRevisionCounts: new Map(),
+    editedIndices: new Set(),
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -224,6 +239,13 @@ export function useChatSession(
         summaryEnabled: activeSessionId ? s.summaryEnabled : false,
         summaryText: activeSessionId ? s.summaryText : "",
         lastContextOutput: activeSessionId ? s.lastContextOutput : null,
+        activeBranchId: activeSessionId ? s.activeBranchId : null,
+        activeBranchName: activeSessionId ? s.activeBranchName : null,
+        contextRunSaveStatus: activeSessionId ? s.contextRunSaveStatus : null,
+        messageDbIds: activeSessionId ? s.messageDbIds : new Map(),
+        messageRevisions: activeSessionId ? s.messageRevisions : new Map(),
+        messageRevisionCounts: activeSessionId ? s.messageRevisionCounts : new Map(),
+        editedIndices: activeSessionId ? s.editedIndices : new Set(),
       };
     });
   }, [isDemo, userId]);
@@ -292,6 +314,12 @@ export function useChatSession(
         messages: demo.messages,
         lastContextOutput: null,
         contextPreviewError: null,
+        activeBranchId: null,
+        activeBranchName: null,
+        contextRunSaveStatus: null,
+        messageDbIds: new Map(),
+        messageRevisions: new Map(),
+        messageRevisionCounts: new Map(),
       }));
       return;
     }
@@ -305,18 +333,18 @@ export function useChatSession(
       if (!row) throw new Error("create session failed");
       if (characterId) await Repo.ensureSessionParticipant(supabase, userId, row.id, characterId).catch(() => {});
 
+      const branch = await Repo.ensureDefaultBranch(supabase, row.id, userId);
+      const branchId = branch?.id;
+      const branchName = branch?.title || branch?.name || "主线";
+
       const messages: ChatMessage[] = [];
       const greeting = character ? String((character.card_json as Record<string, unknown>)?.greeting ?? "") : "";
+      const dbIdMap = new Map<number, string>();
       if (character && greeting) {
         messages.push({ role: "assistant", content: greeting });
-        const branches = await Repo.listBranches(supabase, row.id);
-        let branchId: string | undefined = branches[0]?.id;
-        if (!branchId) {
-          const { data: branch } = await supabase.from("branches").insert({ session_id: row.id, user_id: userId, name: "main" }).select().single();
-          branchId = (branch as { id?: string } | null)?.id;
-        }
         if (branchId) {
-          await Repo.createMessage(supabase, userId, { session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId });
+          const saved = await Repo.createMessage(supabase, userId, { session_id: row.id, branch_id: branchId, role: "assistant", content_text: greeting, character_id: characterId });
+          if (saved) dbIdMap.set(0, saved.id);
         }
       }
 
@@ -338,6 +366,13 @@ export function useChatSession(
         lastContextOutput: preview,
         contextPreviewError: null,
         isContextLoading: false,
+        activeBranchId: branchId ?? null,
+        activeBranchName: branchName,
+        contextRunSaveStatus: null,
+        messageDbIds: dbIdMap,
+        messageRevisions: new Map(),
+        messageRevisionCounts: new Map(),
+        editedIndices: new Set(),
       }));
     } catch (error) {
       setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
@@ -348,15 +383,20 @@ export function useChatSession(
     if (isDemo) {
       const demo = getDefaultDemoSession();
       loadedSessionRef.current = id;
-      setState((s) => ({ ...s, activeSessionId: id, messages: demo.messages, activeCharacter: null, activeTemplate: null, isContextLoading: false }));
+      setState((s) => ({ ...s, activeSessionId: id, messages: demo.messages, activeCharacter: null, activeTemplate: null, isContextLoading: false, activeBranchId: null, activeBranchName: null, contextRunSaveStatus: null, messageDbIds: new Map(), messageRevisions: new Map(), messageRevisionCounts: new Map() }));
       return;
     }
     if (!supabase) return;
 
     setState((s) => ({ ...s, activeSessionId: id, error: null, isContextLoading: true, lastContextOutput: null, contextPreviewError: null }));
     try {
-      const [session, participants, rows] = await withTimeout(
-        Promise.all([Repo.getSession(supabase, id), Repo.listSessionParticipants(supabase, id), Repo.listMessages(supabase, id)]),
+      const [session, participants, branch, rows] = await withTimeout(
+        Promise.all([
+          Repo.getSession(supabase, id),
+          Repo.listSessionParticipants(supabase, id),
+          Repo.ensureDefaultBranch(supabase, id, userId!),
+          Repo.listMessages(supabase, id),
+        ]),
         5000,
         "session load timed out",
       );
@@ -372,6 +412,27 @@ export function useChatSession(
         "session character load timed out",
       );
 
+      const dbIdMap = new Map<number, string>();
+      const editedIdxSet = new Set<number>();
+      rows.forEach((row, i) => {
+        dbIdMap.set(i, row.id);
+        if ((row.revision_no ?? 1) > 1) editedIdxSet.add(i);
+      });
+      const revisionCounts = await withTimeout(
+        Repo.getMessageRevisionCounts(supabase, rows.map((row) => row.id)).catch((error) => {
+          console.warn("[Chat] message revision count load failed:", error);
+          return new Map<string, number>();
+        }),
+        5000,
+        "message revision count load timed out",
+      ).catch((error) => {
+        console.warn("[Chat] message revision count load failed:", error);
+        return new Map<string, number>();
+      });
+      rows.forEach((row, i) => {
+        if ((revisionCounts.get(row.id) ?? 0) > 0) editedIdxSet.add(i);
+      });
+
       loadedSessionRef.current = id;
       setState((s) => ({
         ...s,
@@ -386,6 +447,13 @@ export function useChatSession(
         summaryText: session?.story_summary || "",
         isContextLoading: false,
         contextPreviewError: null,
+        activeBranchId: branch?.id ?? null,
+        activeBranchName: branch?.title || branch?.name || "主线",
+        contextRunSaveStatus: null,
+        messageDbIds: dbIdMap,
+        messageRevisions: new Map(),
+        messageRevisionCounts: revisionCounts,
+        editedIndices: editedIdxSet,
       }));
     } catch (error) {
       loadedSessionRef.current = id;
@@ -398,7 +466,7 @@ export function useChatSession(
       setState((s) => {
         const sessions = s.sessions.filter((session) => session.id !== id);
         const deletingActive = s.activeSessionId === id;
-        return deletingActive ? { ...s, sessions, activeSessionId: sessions[0]?.id ?? null, messages: [], activeCharacter: null, activeTemplate: null, lastContextOutput: null } : { ...s, sessions };
+        return deletingActive ? { ...s, sessions, activeSessionId: sessions[0]?.id ?? null, messages: [], activeCharacter: null, activeTemplate: null, lastContextOutput: null, activeBranchId: null, activeBranchName: null, contextRunSaveStatus: null, messageDbIds: new Map(), messageRevisions: new Map(), messageRevisionCounts: new Map(), editedIndices: new Set() } : { ...s, sessions };
       });
       return;
     }
@@ -426,6 +494,13 @@ export function useChatSession(
           lastContextOutput: deletingActive ? null : s.lastContextOutput,
           contextPreviewError: deletingActive ? null : s.contextPreviewError,
           isContextLoading: false,
+          activeBranchId: deletingActive ? null : s.activeBranchId,
+          activeBranchName: deletingActive ? null : s.activeBranchName,
+          contextRunSaveStatus: deletingActive ? null : s.contextRunSaveStatus,
+          messageDbIds: deletingActive ? new Map() : s.messageDbIds,
+          messageRevisions: deletingActive ? new Map() : s.messageRevisions,
+          messageRevisionCounts: deletingActive ? new Map() : s.messageRevisionCounts,
+          editedIndices: deletingActive ? new Set() : s.editedIndices,
         };
       });
     } catch (error) {
@@ -527,12 +602,16 @@ export function useChatSession(
     setState((s) => ({ ...s, isStreaming: false, isSending: false }));
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, opts?: { editMessageIndex?: number; oldAssistantContentForRevision?: string | null }) => {
     const current = stateRef.current;
+    const editIndex = opts?.editMessageIndex;
     if (current.isStreaming || !current.activeSessionId) return;
+    if (editIndex !== undefined && (editIndex >= current.messages.length || current.messages[editIndex].role !== "user")) return;
 
     const userMsg: ChatMessage = { role: "user", content: text };
-    const prevMessages = current.messages;
+    // For edit mode, context is built from messages BEFORE the edit point
+    const prevMessages = editIndex !== undefined ? current.messages.slice(0, editIndex) : current.messages;
+    const isEdit = editIndex !== undefined;
     let contextOutput: ContextBuildOutput | null = null;
     let contextCharacter: CharacterRow | null = current.activeCharacter;
     let providerMessages: ChatMessage[] = [];
@@ -563,7 +642,16 @@ export function useChatSession(
       return;
     }
 
-    setState((s) => ({ ...s, messages: [...s.messages, userMsg], isSending: true, isStreaming: true, error: null, saveStatus: "idle", lastContextOutput: contextOutput }));
+    // Build the correct UI message list:
+    // - Normal mode: append user message to current messages
+    // - Edit mode: replace message at editIndex, remove all subsequent messages, append edited user message
+    let messagesAfterUser: ChatMessage[];
+    if (isEdit) {
+      messagesAfterUser = [...current.messages.slice(0, editIndex), userMsg];
+    } else {
+      messagesAfterUser = [...current.messages, userMsg];
+    }
+    setState((s) => ({ ...s, messages: messagesAfterUser, isSending: true, isStreaming: true, error: null, saveStatus: "idle", lastContextOutput: contextOutput }));
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -592,26 +680,97 @@ export function useChatSession(
 
     if (!isDemo && supabase && userId && stateRef.current.activeSessionId) {
       setState((s) => ({ ...s, saveStatus: "saving" }));
+      let userDbId: string | null = null;
+      let assistantDbId: string | null = null;
       try {
         const sessionId = stateRef.current.activeSessionId;
         const characterId = contextCharacter?.id ?? stateRef.current.activeCharacter?.id ?? null;
-        const branches = await Repo.listBranches(supabase, sessionId);
-        let branchId: string | undefined = branches[0]?.id;
-        if (!branchId) {
-          const { data: branch } = await supabase.from("branches").insert({ session_id: sessionId, user_id: userId, name: "main" }).select().single();
-          branchId = (branch as { id?: string } | null)?.id;
-        }
+        const branch = await Repo.ensureDefaultBranch(supabase, sessionId, userId);
+        const branchId = branch?.id;
         if (branchId) {
-          await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "user", content_text: text });
+          // Only create new user message in DB if NOT editing (edit already updated the existing row)
+          if (!isEdit) {
+            const savedUser = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "user", content_text: text });
+            userDbId = savedUser?.id ?? null;
+          } else {
+            // For edit mode, reuse the existing DB id for dbIdMap
+            userDbId = current.messageDbIds.get(editIndex) ?? null;
+          }
           if (aiContent) {
             if (hasRoleSession && !characterId) {
               console.warn("[Chat] refusing to save role assistant message without character_id", { sessionId });
             } else {
-              await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined });
+              const asstMsg = await Repo.createMessage(supabase, userId, { session_id: sessionId, branch_id: branchId, role: "assistant", content_text: aiContent, character_id: characterId ?? undefined });
+              assistantDbId = asstMsg?.id ?? null;
+              // Persist old assistant content as a revision of the new assistant message
+              if (assistantDbId && opts?.oldAssistantContentForRevision?.trim()) {
+                console.debug("[Chat] writing assistant revision: newMsgId=%s oldContent=%s",
+                  assistantDbId, opts.oldAssistantContentForRevision.slice(0, 30));
+                await Repo.createMessageRevision(supabase, userId, {
+                  message_id: assistantDbId,
+                  revision_no: 1,
+                  content_text: opts.oldAssistantContentForRevision,
+                }).catch((e) => {
+                  console.warn("[Chat] assistant revision save failed:", e);
+                });
+              }
+            }
+          }
+          if (assistantDbId && opts?.oldAssistantContentForRevision?.trim()) {
+            try {
+              await Repo.createMessageRevision(supabase, userId, {
+                message_id: assistantDbId,
+                revision_no: 1,
+                content_text: opts.oldAssistantContentForRevision,
+              });
+            } catch (error) {
+              console.warn("[Chat] assistant revision save failed:", error);
             }
           }
           await Repo.updateSession(supabase, sessionId, userId, { last_message_at: new Date().toISOString() });
         }
+
+        // Persist context_run (with message_id bound to assistant reply)
+        if (contextOutput && branchId) {
+          Repo.saveContextRun(supabase, userId, {
+            session_id: sessionId,
+            branch_id: branchId,
+            trigger_message_id: userDbId,
+            message_id: assistantDbId,
+            provider: storedProvider,
+            model: stateRef.current.model,
+            system_prompt: contextOutput.systemPrompt,
+            provider_messages_json: providerMessages,
+            worldbook_hits_json: contextOutput.triggerResult.triggered.filter((h) => h.injected).map((h) => ({ id: h.entry.id, title: h.entry.title, keywords: h.matchedKeywords })),
+            skipped_entries_json: contextOutput.triggerResult.skipped.map((s) => ({ id: s.entry.id, title: s.entry.title, reason: s.reason })),
+            injected_memories_json: contextOutput.budget.memories.map((m) => ({ id: m.id, title: m.title })),
+            summary_text: contextOutput.sessionSummaryInjected ? (stateRef.current.summaryText || null) : null,
+            token_budget: contextOutput.budget.budgetLimit,
+            estimated_tokens: contextOutput.estimatedTokens,
+            debug_enabled: false,
+          }).then(() => {
+            setState((s) => ({ ...s, contextRunSaveStatus: "saved" }));
+          }).catch((e) => {
+            console.warn("[Chat] context_run save failed:", e);
+            setState((s) => ({ ...s, contextRunSaveStatus: "failed" }));
+          });
+        }
+
+        // Update dbIdMap
+        if (userDbId || assistantDbId) {
+          setState((s) => {
+            const newMap = new Map(s.messageDbIds);
+            const newCounts = new Map(s.messageRevisionCounts);
+            const msgIdx = s.messages.length - (aiContent ? 2 : 1);
+            if (userDbId) newMap.set(msgIdx, userDbId);
+            if (assistantDbId) {
+              newMap.set(msgIdx + 1, assistantDbId);
+              if (opts?.oldAssistantContentForRevision?.trim()) newCounts.set(assistantDbId, 1);
+            }
+            return { ...s, messageDbIds: newMap, messageRevisionCounts: newCounts };
+          });
+        }
+
         setState((s) => ({ ...s, saveStatus: "saved" }));
       } catch {
         setState((s) => ({ ...s, saveStatus: "error" }));
@@ -633,23 +792,136 @@ export function useChatSession(
   }, [sendMessage]);
 
   const editAndResend = useCallback(async (messageIndex: number, newText: string) => {
-    const messages = stateRef.current.messages;
+    const s = stateRef.current;
+    const messages = s.messages;
     if (messageIndex >= messages.length || messages[messageIndex].role !== "user") return;
-    setState((s) => ({ ...s, messages: [...messages.slice(0, messageIndex), { role: "user", content: newText }] }));
-    await sendMessage(newText);
-  }, [sendMessage]);
+    const oldAssistantContent = messages
+      .slice(messageIndex + 1)
+      .find((message) => message.role === "assistant")?.content ?? null;
+    console.debug("[Chat] editAndResend: oldAssistantContent=%s",
+      oldAssistantContent ? oldAssistantContent.slice(0, 30) : "(none)");
 
-  const deleteMessage = useCallback((messageIndex: number) => {
-    setState((s) => {
-      const messages = [...s.messages];
-      messages.splice(messageIndex, 1);
-      return { ...s, messages };
+    // Save old version as revision in DB
+    if (!isDemo && supabase && userId && s.activeSessionId) {
+      const dbId = s.messageDbIds.get(messageIndex);
+      if (dbId) {
+        const oldContent = messages[messageIndex].content;
+        try {
+          // Fetch current revision_no from DB
+          const { data: currentMsg } = await supabase.from("messages").select("revision_no").eq("id", dbId).single();
+          const currentRev = (currentMsg as { revision_no?: number } | null)?.revision_no ?? 1;
+
+          // Save revision of old content
+          await Repo.createMessageRevision(supabase, userId, {
+            message_id: dbId,
+            revision_no: currentRev,
+            content_text: oldContent,
+          });
+          setState((prev) => {
+            const nextCounts = new Map(prev.messageRevisionCounts);
+            nextCounts.set(dbId, (nextCounts.get(dbId) ?? 0) + 1);
+            const nextRevisions = new Map(prev.messageRevisions);
+            nextRevisions.delete(dbId);
+            return { ...prev, messageRevisionCounts: nextCounts, messageRevisions: nextRevisions };
+          });
+          // Update message content and increment revision
+          await Repo.updateMessage(supabase, dbId, userId, {
+            content_text: newText,
+            edited_at: new Date().toISOString(),
+            revision_no: currentRev + 1,
+          });
+
+          // Soft-delete subsequent assistant messages (keep them in DB but hidden)
+          const subsequentIds: string[] = [];
+          for (let i = messageIndex + 1; i < messages.length; i++) {
+            const mid = s.messageDbIds.get(i);
+            if (mid) subsequentIds.push(mid);
+          }
+          for (const mid of subsequentIds) {
+            await Repo.deleteMessage(supabase, mid, userId, "superseded_by_edit").catch(() => {});
+          }
+          if (subsequentIds.length > 0) {
+            await Repo.supersedeMessages(supabase, subsequentIds, dbId, userId).catch(() => {});
+          }
+
+          // Create a new branch if editing historical (not last) message
+          if (messageIndex < messages.length - 1) {
+            const branch = await Repo.createBranch(supabase, userId, {
+              session_id: s.activeSessionId,
+              name: `branch-${Date.now()}`,
+              title: `分支 ${(currentRev + 1)}`,
+              parent_branch_id: s.activeBranchId ?? undefined,
+              forked_from_message_id: dbId,
+            });
+            if (branch) {
+              await Repo.setActiveBranch(supabase, s.activeSessionId, branch.id, userId);
+              setState((prev) => ({ ...prev, activeBranchId: branch.id, activeBranchName: branch.title || branch.name }));
+            }
+          }
+        } catch (e) {
+          console.warn("[Chat] editAndResend DB sync failed:", e);
+        }
+      }
+    }
+
+    // Mark this index as edited so version arrows show up
+    setState((prev) => {
+      const next = new Set(prev.editedIndices);
+      next.add(messageIndex);
+      return { ...prev, editedIndices: next };
     });
-  }, []);
+
+    // Delegate to sendMessage in edit mode — it handles UI truncation, streaming, and saving the new AI reply
+    await sendMessage(newText, { editMessageIndex: messageIndex, oldAssistantContentForRevision: oldAssistantContent });
+  }, [sendMessage, isDemo, userId]);
+
+  const deleteMessage = useCallback(async (messageIndex: number) => {
+    const s = stateRef.current;
+    // Sync delete to DB first — don't remove from UI until DB confirms
+    if (!isDemo && supabase && userId && s.activeSessionId) {
+      const dbId = s.messageDbIds.get(messageIndex);
+      if (dbId) {
+        try {
+          await Repo.deleteMessage(supabase, dbId, userId, "user_deleted");
+        } catch (e) {
+          console.warn("[Chat] deleteMessage DB sync failed:", e);
+          setState((prev) => ({ ...prev, error: "删除消息失败，请重试" }));
+          return; // Block UI removal on DB failure
+        }
+      } else {
+        console.warn("[Chat] deleteMessage: no dbId for message index", messageIndex);
+        // Still remove from UI for consistency (e.g. demo messages, or transient state)
+      }
+    }
+    setState((prev) => {
+      const messages = [...prev.messages];
+      messages.splice(messageIndex, 1);
+      return { ...prev, messages };
+    });
+  }, [isDemo, userId]);
 
   const copyMessage = useCallback((messageIndex: number) => {
     const text = stateRef.current.messages[messageIndex]?.content;
     if (text) navigator.clipboard.writeText(text).catch(() => {});
+  }, []);
+
+  const loadMessageRevisions = useCallback(async (messageIndex: number): Promise<MessageRevisionRow[]> => {
+    const dbId = stateRef.current.messageDbIds.get(messageIndex);
+    if (!dbId || !supabase) return [];
+    try {
+      const revisions = await Repo.loadMessageRevisions(supabase, dbId);
+      setState((s) => {
+        const newRevisions = new Map(s.messageRevisions);
+        const newCounts = new Map(s.messageRevisionCounts);
+        newRevisions.set(dbId, revisions);
+        newCounts.set(dbId, revisions.length);
+        return { ...s, messageRevisions: newRevisions, messageRevisionCounts: newCounts };
+      });
+      return revisions;
+    } catch (error) {
+      console.warn("[Chat] message revisions load failed:", error);
+      return [];
+    }
   }, []);
 
   const retry = useCallback(async () => {
@@ -724,6 +996,7 @@ export function useChatSession(
     saveSummary,
     clearSummary,
     generateSummary,
+    loadMessageRevisions,
     isDemo,
     apiConfigured,
     providerLabel,

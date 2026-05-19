@@ -2,12 +2,14 @@ import type {
   CharacterRow,
   SessionRow,
   MessageRow,
+  MessageRevisionRow,
   PromptTemplateRow,
   WorldbookEntryRow,
   WorldbookRow,
   MemoryRow,
   ModelPresetRow,
   ContextRunRow,
+  BranchRow,
   Visibility,
 } from "./database";
 
@@ -16,12 +18,14 @@ export type {
   CharacterRow,
   SessionRow,
   MessageRow,
+  MessageRevisionRow,
   PromptTemplateRow,
   WorldbookEntryRow,
   WorldbookRow,
   MemoryRow,
   ModelPresetRow,
   ContextRunRow,
+  BranchRow,
   Visibility,
 };
 

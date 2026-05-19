@@ -13,6 +13,7 @@ import { ContextPreview } from "../features/roleplay/components/chat/ContextPrev
 import { supabase } from "../features/auth/supabaseClient";
 import * as Repo from "../features/roleplay/repositories/roleplayRepository";
 import type { CharacterRow } from "../features/roleplay/types/database";
+import type { ChatMessage } from "../features/roleplay/providers/provider.types";
 import type { ProviderType, ApiKeyStorageMode } from "../features/roleplay/providers";
 import { loadApiKey } from "../features/roleplay/storage/apiKeyStorage";
 
@@ -62,7 +63,30 @@ export function ChatRoomPage() {
     onAddWorldbooks: chat.addWorldbooks, onRemoveWorldbook: chat.removeWorldbook, onToggleWorldbook: chat.toggleWorldbook,
     onAddMemories: chat.addMemories, onRemoveMemory: chat.removeMemory, onToggleMemory: chat.toggleMemory,
     onSaveSummaryText: chat.saveSummary, onClearSummary: chat.clearSummary, onGenerateSummary: chat.generateSummary,
+    activeBranchName: chat.activeBranchName,
+    contextRunSaveStatus: chat.contextRunSaveStatus,
   };
+
+  function renderMessageBubble(msg: ChatMessage, i: number) {
+    const dbId = chat.messageDbIds.get(i);
+    const revisions = dbId ? chat.messageRevisions.get(dbId) : undefined;
+    const revisionCount = dbId ? (chat.messageRevisionCounts.get(dbId) ?? 0) : 0;
+    return (
+      <MessageBubble
+        key={i}
+        message={msg}
+        index={i}
+        isStreaming={chat.isStreaming && i === chat.messages.length - 1 && msg.role === "assistant"}
+        onCopy={() => chat.copyMessage(i)}
+        onDelete={() => chat.deleteMessage(i)}
+        onRegenerate={msg.role === "assistant" && i === chat.messages.length - 1 && !chat.isStreaming ? chat.regenerateLast : undefined}
+        onEdit={msg.role === "user" ? () => { setEditingIndex(i); setEditText(msg.content); } : undefined}
+        revisionCount={revisionCount}
+        revisions={revisions}
+        onLoadRevisions={() => chat.loadMessageRevisions(i)}
+      />
+    );
+  }
 
   // Mobile
   if (isMobile) {
@@ -76,7 +100,7 @@ export function ChatRoomPage() {
         {showMobileSessions && (<div className="absolute top-0 left-0 w-72 h-dvh bg-white z-30 shadow-modal overflow-y-auto"><div className="flex items-center justify-between p-3 border-b"><span className="text-sm font-medium">会话</span><button onClick={() => setShowMobileSessions(false)} className="btn-ghost p-1 text-xs">关闭</button></div><SessionList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelect={(id) => { chat.selectSession(id); setShowMobileSessions(false); }} onCreate={() => { handleCreateSession(); setShowMobileSessions(false); }} onDelete={chat.deleteSession} loading={false} /></div>)}
         {showMobileContext && (<div className="absolute top-0 right-0 w-80 h-dvh bg-white z-30 shadow-modal overflow-y-auto"><div className="flex items-center justify-between p-3 border-b"><span className="text-sm font-medium">上下文</span><button onClick={() => setShowMobileContext(false)} className="btn-ghost p-1 text-xs">关闭</button></div><ContextPreview {...contextProps} /></div>)}
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 py-4">
-          {chat.messages.length === 0 ? <EmptyState icon={<MessageCircle className="h-10 w-10" />} title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"} description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "Demo · Mock AI" : chat.apiConfigured ? "输入消息" : "请先配置 API Key"} /> : chat.messages.map((msg, i) => (<MessageBubble key={i} message={msg} index={i} isStreaming={chat.isStreaming && i === chat.messages.length - 1 && msg.role === "assistant"} onCopy={() => chat.copyMessage(i)} onDelete={() => chat.deleteMessage(i)} onRegenerate={msg.role === "assistant" && i === chat.messages.length - 1 && !chat.isStreaming ? chat.regenerateLast : undefined} onEdit={msg.role === "user" ? () => { setEditingIndex(i); setEditText(msg.content); } : undefined} />))}
+          {chat.messages.length === 0 ? <EmptyState icon={<MessageCircle className="h-10 w-10" />} title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"} description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "Demo · Mock AI" : chat.apiConfigured ? "输入消息" : "请先配置 API Key"} /> : chat.messages.map((msg, i) => renderMessageBubble(msg, i))}
           <div ref={messagesEndRef} />
           {userScrolledUp && <button onClick={scrollToBottom} className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-brand-500 text-white rounded-full px-4 py-1.5 text-xs shadow-elevated z-10 animate-bounce">↓ 新消息</button>}
         </div>
@@ -99,7 +123,7 @@ export function ChatRoomPage() {
           <div className="flex items-center gap-2">{chat.saveStatus === "saving" && <span className="text-xs text-ink-300">保存中...</span>}{chat.saveStatus === "saved" && <span className="text-xs text-emerald-500">已保存</span>}{chat.saveStatus === "error" && <span className="text-xs text-rose-500">保存失败</span>}<ModeBadge /></div>
         </div>
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
-          {chat.messages.length === 0 ? <EmptyState icon={<MessageCircle className="h-10 w-10" />} title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"} description={!hasActiveSession ? "点击左侧 + 创建" : chat.isDemo ? "Demo · Mock AI" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先配置 API Key"} /> : chat.messages.map((msg, i) => (<MessageBubble key={i} message={msg} index={i} isStreaming={chat.isStreaming && i === chat.messages.length - 1 && msg.role === "assistant"} onCopy={() => chat.copyMessage(i)} onDelete={() => chat.deleteMessage(i)} onRegenerate={msg.role === "assistant" && i === chat.messages.length - 1 && !chat.isStreaming ? chat.regenerateLast : undefined} onEdit={msg.role === "user" ? () => { setEditingIndex(i); setEditText(msg.content); } : undefined} />))}
+          {chat.messages.length === 0 ? <EmptyState icon={<MessageCircle className="h-10 w-10" />} title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"} description={!hasActiveSession ? "点击左侧 + 创建" : chat.isDemo ? "Demo · Mock AI" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先配置 API Key"} /> : chat.messages.map((msg, i) => renderMessageBubble(msg, i))}
           <div ref={messagesEndRef} />{userScrolledUp && <button onClick={scrollToBottom} className="sticky bottom-4 left-1/2 -translate-x-1/2 bg-brand-500 text-white rounded-full px-4 py-1.5 text-xs shadow-elevated animate-bounce">↓ 新消息</button>}
         </div>
         {chat.error && (<div className="px-4 py-2 bg-rose-light/80 border-t flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-rose-500" /><p className="text-xs text-rose-700 flex-1 truncate">{chat.error}</p><button onClick={chat.retry} className="btn-ghost text-xs text-rose-600"><RefreshCw className="h-3 w-3" />重试</button></div>)}

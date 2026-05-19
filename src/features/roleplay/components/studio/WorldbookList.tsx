@@ -46,7 +46,7 @@ export function WorldbookList({
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           {worldbooks.map((w) => (
-            <div key={w.id} className={`card cursor-pointer transition-all ${activeWorldbookId === w.id ? "ring-2 ring-brand-300 border-brand-300" : "hover:border-brand-200"}`}
+            <div key={w.id} className={`card cursor-pointer transition-all group ${activeWorldbookId === w.id ? "ring-2 ring-brand-300 border-brand-300" : "hover:border-brand-200"}`}
               onClick={() => onSelectWb(w.id)}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
