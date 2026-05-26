@@ -226,28 +226,28 @@ export function ContextPreview(props: ContextPreviewProps) {
   ];
 
   return (
-    <div className="flex h-full flex-col bg-gradient-to-b from-white to-surface-50/50">
-      <div className="border-b border-surface-100/60 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-50 text-brand-500">
-            <Cpu className="h-3.5 w-3.5" />
+    <div className="flex h-full flex-col bg-gradient-to-b from-white/90 to-sky-50/30">
+      <div className="border-b border-sky-100/60 px-4 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-sky-50 text-brand-500 shadow-sm">
+            <Cpu className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-ink-700">上下文控制台</h3>
-            <p className="text-[10px] text-ink-400">
+            <h3 className="text-sm font-semibold text-ink-800">上下文控制台</h3>
+            <p className="text-[11px] text-ink-400">
               {contextPreviewError ? "预览失败，可继续聊天" : lastContextOutput?.debugInfo ? `${lastContextOutput.debugInfo.buildTimeMs}ms · ${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit} tok` : "构建中..."}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-1 py-1">
         {/* Status rows */}
-        <div className="space-y-0.5 px-2 py-2">
+        <div className="mb-2 space-y-0.5 rounded-xl border border-sky-100/40 bg-white/50 p-2 mx-1">
           {statusRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-colors hover:bg-surface-50/50">
+            <div key={row.label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-colors hover:bg-sky-50/30">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="text-ink-400">{row.icon}</span>
+                <span className="text-sky-400">{row.icon}</span>
                 <span className="truncate text-[11px] text-ink-500">{row.label}</span>
               </div>
               <span className="ml-2 max-w-[120px] flex-shrink-0 truncate text-right font-mono text-[11px] text-ink-400">
@@ -262,6 +262,7 @@ export function ContextPreview(props: ContextPreviewProps) {
             title={`角色: ${activeCharacter.name}${activeCharacter.deleted_at ? "（已删除角色）" : ""}`}
             icon={<Cpu className="h-3.5 w-3.5 text-brand-400" />}
             defaultOpen
+            variant="active"
           >
             <div className="space-y-0.5 pb-1 text-xs text-ink-400">
               {card?.identity && <p>身份：{card.identity}</p>}
@@ -523,7 +524,7 @@ export function ContextPreview(props: ContextPreviewProps) {
           )}
         </ContextSectionCard>
 
-        <ContextSectionCard title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length} 命中` : "预览"} level={3}>
+        <ContextSectionCard title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length} 命中` : "预览"} level={3} variant="debug">
           <div className="space-y-2 pb-1 text-xs text-ink-400">
             {contextRunSaveStatus !== null && (
               <div>
@@ -554,7 +555,7 @@ export function ContextPreview(props: ContextPreviewProps) {
           </div>
         </ContextSectionCard>
 
-        <ContextSectionCard title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"} level={3}>
+        <ContextSectionCard title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"} level={3} variant="debug">
           {lastContextOutput ? (
             <div className="space-y-0.5 pb-1 text-xs text-ink-400">
               <div className="flex justify-between"><span>角色 + 模板</span><span>{estimateTokens(lastContextOutput.budget.characterPrompt + lastContextOutput.budget.templatePrompt)}</span></div>
@@ -569,10 +570,10 @@ export function ContextPreview(props: ContextPreviewProps) {
         </ContextSectionCard>
 
         <ContextSectionCard title="最终 System Prompt" icon={<Eye className="h-3.5 w-3.5 text-brand-400" />} badge={estimateTokens(finalPrompt).toString()} defaultOpen level={2}>
-          <p className="mb-1 text-xs text-ink-300">
+          <p className="mb-2 text-xs text-ink-400">
             {messageCount === 0 ? "预览构建结果，下一条消息将使用这份 system prompt。" : "最近一次上下文构建结果。"}
           </p>
-          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-card bg-surface-50 p-2 text-xs leading-relaxed text-ink-400">
+          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-950/90 p-3 text-xs leading-relaxed text-slate-300 shadow-inner">
             {contextPreviewError && !finalPrompt ? "上下文预览失败，可继续聊天" : finalPrompt || "上下文加载中..."}
           </pre>
         </ContextSectionCard>

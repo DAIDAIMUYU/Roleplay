@@ -18,9 +18,9 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3 gap-3">
       <DesktopSidebar />
-      <main className="flex-1 overflow-y-auto bg-surface-50">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>

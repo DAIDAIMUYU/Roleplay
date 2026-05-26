@@ -40,11 +40,12 @@ export function LandingPage() {
   const api = getApiSummary();
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-hidden bg-gradient-to-b from-[#eaf5ff] via-[#f7fbff] to-white">
       {/* Background decorations */}
-      <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-blue-100/40 to-purple-100/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-sky-100/30 to-blue-50/20 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-indigo-50/20 to-purple-50/10 blur-2xl" />
+      <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-sky-200/50 to-blue-200/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-blue-200/40 to-sky-100/30 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-indigo-100/30 to-purple-100/20 blur-2xl" />
+      <div className="pointer-events-none absolute top-1/4 right-1/4 h-48 w-48 rounded-full bg-gradient-to-br from-sky-100/40 to-blue-50/30 blur-2xl" />
       
       <div className="relative mx-auto max-w-5xl px-4 py-8 pb-24 md:py-14 md:pb-14">
 
@@ -88,7 +89,7 @@ export function LandingPage() {
 
         <div className="grid gap-4 md:grid-cols-3">
           {/* Step 1 */}
-          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-500">
                 <KeyRound className="h-5 w-5" />
@@ -108,7 +109,7 @@ export function LandingPage() {
           </div>
 
           {/* Step 2 */}
-          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-sky-500">
                 <Palette className="h-5 w-5" />
@@ -128,7 +129,7 @@ export function LandingPage() {
           </div>
 
           {/* Step 3 */}
-          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
                 <MessageCircle className="h-5 w-5" />
@@ -150,25 +151,25 @@ export function LandingPage() {
       </div>
 
       {/* ─── Need Help ─── */}
-      <div className="mb-10 rounded-2xl border border-surface-100/80 bg-gradient-to-r from-brand-50/30 to-amber-light/20 p-5">
+      <div className="mb-10 rounded-2xl border border-white/60 bg-gradient-to-r from-brand-50/40 to-amber-light/30 p-5 backdrop-blur-md">
         <div className="mb-4 flex items-center gap-2">
           <HelpCircle className="h-5 w-5 text-brand-400" />
           <h3 className="text-sm font-semibold text-ink-900">需要帮助？</h3>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Link to="/settings/data" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+          <Link to="/settings/data" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
             <Upload className="h-4 w-4 text-ink-400" />
             数据备份与恢复
           </Link>
-          <Link to="/settings" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+          <Link to="/settings" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
             <KeyRound className="h-4 w-4 text-ink-400" />
             API 配置说明
           </Link>
-          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
             <Github className="h-4 w-4 text-ink-400" />
             GitHub
           </a>
-          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
             <FileText className="h-4 w-4 text-ink-400" />
             用户文档
           </a>
@@ -181,13 +182,13 @@ export function LandingPage() {
 
         <div className="space-y-3">
           {/* Compact status cards */}
-          <div className="rounded-2xl border border-surface-100/80 bg-white/80 backdrop-blur-sm p-4 shadow-sm">
+          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-ink-300" />
                 <span className="text-xs font-medium text-ink-500">数据模式</span>
               </div>
-              <span className="rounded-full bg-surface-100 px-2.5 py-0.5 text-xs font-medium text-ink-600">
+              <span className="rounded-full bg-surface-100/80 px-2.5 py-0.5 text-xs font-medium text-ink-600">
                 {user ? "云端同步" : "本地优先"}
               </span>
             </div>
@@ -198,7 +199,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-surface-100/80 bg-white/80 backdrop-blur-sm p-4 shadow-sm">
+          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-ink-300" />
@@ -216,7 +217,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-surface-100/80 bg-white/80 backdrop-blur-sm p-4 shadow-sm">
+          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-400" />
               <span className="text-xs font-medium text-ink-500">数据保护提示</span>
