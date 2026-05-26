@@ -16,7 +16,9 @@ import {
   selectionFromCredential,
 } from "../features/roleplay/services/hostedCredentialsService";
 import { ModeBadge } from "../shared/components/ModeBadge";
+import { SidebarCollapseButton } from "../shared/components/SidebarCollapseButton";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
+import { usePersistentCollapsedState } from "../shared/hooks/usePersistentCollapsedState";
 import * as Repo from "../features/roleplay/repositories/roleplayRepository";
 import * as LocalRepo from "../features/roleplay/repositories/localRoleplayRepository";
 import type { CharacterRow } from "../features/roleplay/types/database";
@@ -156,6 +158,8 @@ export function ChatRoomPage() {
   const { isGuestOrDemo, user } = useAuth();
   const userId = user?.id;
   const [providerConfig, setProviderConfig] = useState(detectProviderConfig);
+  const [sessionsCollapsed, toggleSessionsCollapsed] = usePersistentCollapsedState("roleplay.chat.sessions.collapsed", false);
+  const [contextCollapsed, toggleContextCollapsed] = usePersistentCollapsedState("roleplay.chat.context.collapsed", false);
 
   useEffect(() => {
     setProviderConfig(detectProviderConfig());
@@ -506,12 +510,24 @@ export function ChatRoomPage() {
         )}
 
         {showMobileContext && (
-          <div className="absolute right-0 top-0 z-30 h-dvh w-80 overflow-y-auto bg-white shadow-modal">
-            <div className="flex items-center justify-between border-b p-3">
-              <span className="text-sm font-medium">上下文</span>
-              <button onClick={() => setShowMobileContext(false)} className="btn-ghost p-1 text-xs">关闭</button>
+          <div className="absolute inset-x-0 bottom-0 z-30 flex h-[85vh] flex-col rounded-t-2xl bg-white shadow-modal">
+            <div className="flex items-center justify-between border-b border-surface-100/60 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-brand-500">
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+                <span className="text-sm font-semibold text-ink-900">上下文控制台</span>
+              </div>
+              <button 
+                onClick={() => setShowMobileContext(false)} 
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-100 text-ink-400 transition-colors hover:bg-surface-200 hover:text-ink-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <ContextPreview {...contextProps} />
+            <div className="flex-1 overflow-y-auto pb-safe-bottom">
+              <ContextPreview {...contextProps} />
+            </div>
           </div>
         )}
 
@@ -599,15 +615,56 @@ export function ChatRoomPage() {
 
   return (
     <div className="flex h-full bg-surface-50">
-      <div className="w-60 flex-shrink-0 overflow-y-auto border-r border-surface-100 bg-white">
-        <SessionList
-          sessions={chat.sessions}
-          activeSessionId={chat.activeSessionId}
-          onSelect={chat.selectSession}
-          onCreate={handleCreateSession}
-          onDelete={chat.deleteSession}
-          loading={false}
-        />
+      <div className={`flex-shrink-0 overflow-y-auto border-r border-surface-100 bg-white transition-all duration-200 ${sessionsCollapsed ? "w-16" : "w-60"}`}>
+        {sessionsCollapsed ? (
+          <div className="flex h-full flex-col items-center py-3">
+            <button
+              onClick={handleCreateSession}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-500 transition-colors hover:bg-brand-100"
+              title="新建会话"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <div className="mt-2 flex-1 overflow-y-auto">
+              {chat.sessions.slice(0, 8).map((session) => (
+                <button
+                  key={session.id}
+                  onClick={() => void chat.selectSession(session.id)}
+                  className={`mt-1 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                    session.id === chat.activeSessionId
+                      ? "bg-brand-50 text-brand-600"
+                      : "text-ink-400 hover:bg-surface-50 hover:text-ink-600"
+                  }`}
+                  title={session.title}
+                >
+                  <span className="text-sm">
+                    {session.characterEmoji || <MessageCircle className="h-4 w-4" />}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-surface-100 pt-2">
+              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} />
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b border-surface-100 px-3 py-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink-300">会话列表</span>
+              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <SessionList
+                sessions={chat.sessions}
+                activeSessionId={chat.activeSessionId}
+                onSelect={chat.selectSession}
+                onCreate={handleCreateSession}
+                onDelete={chat.deleteSession}
+                loading={false}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -631,7 +688,9 @@ export function ChatRoomPage() {
         </div>
 
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
-          {messageList}
+          <div className="mx-auto max-w-4xl">
+            {messageList}
+          </div>
           {userScrolledUp && (
             <button onClick={scrollToBottom} className="sticky bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
               回到底部
@@ -682,19 +741,43 @@ export function ChatRoomPage() {
           </div>
         )}
 
-        <ChatInput
-          value={inputValue}
-          onChange={setInputValue}
-          onSend={handleSend}
-          onStop={chat.stopGeneration}
-          isStreaming={chat.isStreaming}
-          disabled={!hasActiveSession || (!chat.isDemo && !chat.apiConfigured)}
-          placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息... (Enter 发送，Shift+Enter 换行)"}
-        />
+        <div className="border-t border-surface-100 bg-white px-4 py-3">
+          <div className="mx-auto max-w-4xl">
+            <ChatInput
+              value={inputValue}
+              onChange={setInputValue}
+              onSend={handleSend}
+              onStop={chat.stopGeneration}
+              isStreaming={chat.isStreaming}
+              disabled={!hasActiveSession || (!chat.isDemo && !chat.apiConfigured)}
+              placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息... (Enter 发送，Shift+Enter 换行)"}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="w-72 flex-shrink-0 overflow-y-auto border-l border-surface-100 bg-white">
-        <ContextPreview {...contextProps} />
+      <div className={`flex-shrink-0 overflow-y-auto border-l border-surface-100 bg-white transition-all duration-200 ${contextCollapsed ? "w-12" : "w-72"}`}>
+        {contextCollapsed ? (
+          <div className="flex h-full flex-col items-center py-3">
+            <button
+              onClick={toggleContextCollapsed}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-500 transition-colors hover:bg-brand-100"
+              title="展开上下文控制台"
+            >
+              <ChevronDown className="h-4 w-4 rotate-90" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b border-surface-100/60 px-3 py-2">
+              <span className="text-xs font-semibold text-ink-500">上下文</span>
+              <SidebarCollapseButton collapsed={contextCollapsed} onToggle={toggleContextCollapsed} />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <ContextPreview {...contextProps} />
+            </div>
+          </div>
+        )}
       </div>
 
       {showPicker && (

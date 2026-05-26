@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import {
   BookOpen,
   Brain,
-  ChevronDown,
-  ChevronRight,
   Cpu,
   Eye,
   FileText,
@@ -26,6 +24,7 @@ import { estimateTokens } from "../../context/tokenBudget";
 import { supabase } from "../../../auth/supabaseClient";
 import * as Repo from "../../repositories/roleplayRepository";
 import * as LocalRepo from "../../repositories/localRoleplayRepository";
+import { ContextSectionCard } from "../../../../shared/components/ContextSectionCard";
 
 interface ContextPreviewProps {
   sessionTitle: string;
@@ -64,34 +63,6 @@ interface ContextPreviewProps {
   onSaveSummaryText: (text: string) => Promise<void>;
   onClearSummary: () => Promise<void>;
   onGenerateSummary: () => Promise<string | null>;
-}
-
-function Collapse({
-  title,
-  icon,
-  badge,
-  defaultOpen,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  badge?: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen ?? false);
-
-  return (
-    <div className="border-b border-surface-100 last:border-0">
-      <button onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-2 px-3 py-2.5 text-xs hover:bg-surface-50">
-        {open ? <ChevronDown className="h-3 w-3 text-ink-300" /> : <ChevronRight className="h-3 w-3 text-ink-300" />}
-        <span className="text-ink-300">{icon}</span>
-        <span className="flex-1 text-left font-medium text-ink-600">{title}</span>
-        {badge && <span className="rounded-full bg-surface-100 px-1.5 py-0.5 text-xs text-ink-400">{badge}</span>}
-      </button>
-      {open && <div className="px-3 pb-2">{children}</div>}
-    </div>
-  );
 }
 
 function PickerModal({
@@ -255,29 +226,31 @@ export function ContextPreview(props: ContextPreviewProps) {
   ];
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-surface-100 p-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-300">上下文控制台</h3>
-        {contextPreviewError ? (
-          <p className="mt-0.5 text-xs text-amber-600">上下文预览失败，可继续聊天</p>
-        ) : lastContextOutput?.debugInfo ? (
-          <p className="mt-0.5 text-xs text-ink-300">
-            构建 {lastContextOutput.debugInfo.buildTimeMs}ms · 估算 {lastContextOutput.estimatedTokens} / {lastContextOutput.budget.budgetLimit} tok
-          </p>
-        ) : (
-          <p className="mt-0.5 text-xs text-ink-300">上下文预览异步构建中</p>
-        )}
+    <div className="flex h-full flex-col bg-gradient-to-b from-white to-surface-50/50">
+      <div className="border-b border-surface-100/60 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-50 text-brand-500">
+            <Cpu className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-ink-700">上下文控制台</h3>
+            <p className="text-[10px] text-ink-400">
+              {contextPreviewError ? "预览失败，可继续聊天" : lastContextOutput?.debugInfo ? `${lastContextOutput.debugInfo.buildTimeMs}ms · ${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit} tok` : "构建中..."}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="space-y-1 px-3 py-2">
+        {/* Status rows */}
+        <div className="space-y-0.5 px-2 py-2">
           {statusRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between rounded-card px-2 py-1.5 hover:bg-surface-50">
+            <div key={row.label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-colors hover:bg-surface-50/50">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="text-ink-300">{row.icon}</span>
-                <span className="truncate text-xs text-ink-500">{row.label}</span>
+                <span className="text-ink-400">{row.icon}</span>
+                <span className="truncate text-[11px] text-ink-500">{row.label}</span>
               </div>
-              <span className="ml-2 max-w-[110px] flex-shrink-0 truncate text-right font-mono text-xs text-ink-300">
+              <span className="ml-2 max-w-[120px] flex-shrink-0 truncate text-right font-mono text-[11px] text-ink-400">
                 {row.value}
               </span>
             </div>
@@ -285,7 +258,7 @@ export function ContextPreview(props: ContextPreviewProps) {
         </div>
 
         {activeCharacter && (
-          <Collapse
+          <ContextSectionCard
             title={`角色: ${activeCharacter.name}${activeCharacter.deleted_at ? "（已删除角色）" : ""}`}
             icon={<Cpu className="h-3.5 w-3.5 text-brand-400" />}
             defaultOpen
@@ -300,10 +273,10 @@ export function ContextPreview(props: ContextPreviewProps) {
                 </p>
               )}
             </div>
-          </Collapse>
+          </ContextSectionCard>
         )}
 
-        <Collapse title="提示词模板" icon={<FileText className="h-3.5 w-3.5 text-emerald-400" />} badge={activeTemplate ? activeTemplate.title : "未添加"}>
+        <ContextSectionCard title="提示词模板" icon={<FileText className="h-3.5 w-3.5 text-emerald-400" />} badge={activeTemplate ? activeTemplate.title : "未添加"}>
           {activeTemplate ? (
             <div className="pb-1">
               <p className="mb-1 line-clamp-2 text-xs text-ink-400">{activeTemplate.content.slice(0, 120)}</p>
@@ -325,9 +298,9 @@ export function ContextPreview(props: ContextPreviewProps) {
             <Plus className="h-3 w-3" />
             添加模板
           </button>
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="世界书" icon={<BookOpen className="h-3.5 w-3.5 text-sky-400" />} badge={`${worldbookIds.length} 个`}>
+        <ContextSectionCard title="世界书" icon={<BookOpen className="h-3.5 w-3.5 text-sky-400" />} badge={`${worldbookIds.length} 个`}>
           {worldbookIds.length === 0 ? (
             <p className="pb-1 text-xs text-ink-300">未添加世界书。</p>
           ) : (
@@ -369,9 +342,9 @@ export function ContextPreview(props: ContextPreviewProps) {
             <Plus className="h-3 w-3" />
             添加世界书
           </button>
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="记忆" icon={<Brain className="h-3.5 w-3.5 text-amber-400" />} badge={`${memoryIds.length} 条`}>
+        <ContextSectionCard title="记忆" icon={<Brain className="h-3.5 w-3.5 text-amber-400" />} badge={`${memoryIds.length} 条`}>
           {memoryIds.length === 0 ? (
             <p className="pb-1 text-xs text-ink-300">未添加记忆。</p>
           ) : (
@@ -453,9 +426,9 @@ export function ContextPreview(props: ContextPreviewProps) {
               ))
             )}
           </div>
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="会话摘要" icon={<ListTree className="h-3.5 w-3.5 text-ink-400" />} badge={summaryEnabled ? "已启用" : "未启用"}>
+        <ContextSectionCard title="会话摘要" icon={<ListTree className="h-3.5 w-3.5 text-ink-400" />} badge={summaryEnabled ? "已启用" : "未启用"}>
           {showSummaryEditor ? (
             <div className="pb-2">
               <p className="mb-2 text-xs text-ink-300">
@@ -548,9 +521,9 @@ export function ContextPreview(props: ContextPreviewProps) {
               </button>
             </div>
           )}
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length} 命中` : "预览"}>
+        <ContextSectionCard title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length} 命中` : "预览"} level={3}>
           <div className="space-y-2 pb-1 text-xs text-ink-400">
             {contextRunSaveStatus !== null && (
               <div>
@@ -579,9 +552,9 @@ export function ContextPreview(props: ContextPreviewProps) {
               </details>
             )}
           </div>
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"}>
+        <ContextSectionCard title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"} level={3}>
           {lastContextOutput ? (
             <div className="space-y-0.5 pb-1 text-xs text-ink-400">
               <div className="flex justify-between"><span>角色 + 模板</span><span>{estimateTokens(lastContextOutput.budget.characterPrompt + lastContextOutput.budget.templatePrompt)}</span></div>
@@ -593,16 +566,16 @@ export function ContextPreview(props: ContextPreviewProps) {
           ) : (
             <p className="pb-1 text-xs text-ink-300">{contextPreviewError ? "上下文预览失败，可继续聊天" : "上下文预览构建中。"}</p>
           )}
-        </Collapse>
+        </ContextSectionCard>
 
-        <Collapse title="最终 System Prompt" icon={<Eye className="h-3.5 w-3.5 text-brand-400" />} badge={estimateTokens(finalPrompt).toString()} defaultOpen>
+        <ContextSectionCard title="最终 System Prompt" icon={<Eye className="h-3.5 w-3.5 text-brand-400" />} badge={estimateTokens(finalPrompt).toString()} defaultOpen level={2}>
           <p className="mb-1 text-xs text-ink-300">
             {messageCount === 0 ? "预览构建结果，下一条消息将使用这份 system prompt。" : "最近一次上下文构建结果。"}
           </p>
           <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-card bg-surface-50 p-2 text-xs leading-relaxed text-ink-400">
             {contextPreviewError && !finalPrompt ? "上下文预览失败，可继续聊天" : finalPrompt || "上下文加载中..."}
           </pre>
-        </Collapse>
+        </ContextSectionCard>
       </div>
 
       {showTplPicker && (

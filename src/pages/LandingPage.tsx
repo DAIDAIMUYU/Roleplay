@@ -40,7 +40,13 @@ export function LandingPage() {
   const api = getApiSummary();
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 pb-24 md:py-14 md:pb-14">
+    <div className="relative overflow-hidden">
+      {/* Background decorations */}
+      <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-blue-100/40 to-purple-100/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-sky-100/30 to-blue-50/20 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-indigo-50/20 to-purple-50/10 blur-2xl" />
+      
+      <div className="relative mx-auto max-w-5xl px-4 py-8 pb-24 md:py-14 md:pb-14">
 
       {/* ─── Hero ─── */}
       <div className="mb-10 text-center">
@@ -251,6 +257,7 @@ export function LandingPage() {
           当前客户端：网页模式 · 桌面模式与移动 App 暂未推出
         </p>
       </div>
+    </div>
     </div>
   );
 }
