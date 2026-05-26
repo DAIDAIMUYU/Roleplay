@@ -48,7 +48,7 @@ export function ProductPreviewCard() {
       setCurrentStep((prev) => (prev + 1) % STEPS.length);
       setVisibleMessages(0);
       setVisibleHints(0);
-    }, 6000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, []);
@@ -56,18 +56,18 @@ export function ProductPreviewCard() {
   useEffect(() => {
     const step = STEPS[currentStep];
     
-    // Show messages one by one
+    // Show messages one by one (faster)
     const messageTimers = step.messages.map((_, index) => 
-      setTimeout(() => setVisibleMessages(index + 1), 300 * (index + 1))
+      setTimeout(() => setVisibleMessages(index + 1), 150 * (index + 1))
     );
     
-    // Show hints after messages
+    // Show hints after messages (faster)
     const hintTimer = setTimeout(() => {
       const hintTimers = step.hints.map((_, index) =>
-        setTimeout(() => setVisibleHints(index + 1), 200 * (index + 1))
+        setTimeout(() => setVisibleHints(index + 1), 120 * (index + 1))
       );
       return () => hintTimers.forEach(clearTimeout);
-    }, 300 * step.messages.length + 200);
+    }, 150 * step.messages.length + 100);
 
     return () => {
       messageTimers.forEach(clearTimeout);

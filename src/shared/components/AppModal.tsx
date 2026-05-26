@@ -7,8 +7,11 @@ interface AppModalProps {
   description?: string;
   onClose: () => void;
   children: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  footer?: ReactNode;
+  size?: "sm" | "md" | "lg" | "xl" | "wide";
   closeOnOverlayClick?: boolean;
+  bodyClassName?: string;
+  contentClassName?: string;
 }
 
 const sizeClasses = {
@@ -16,6 +19,7 @@ const sizeClasses = {
   md: "max-w-lg",
   lg: "max-w-2xl",
   xl: "max-w-4xl",
+  wide: "max-w-[920px]",
 };
 
 export function AppModal({
@@ -24,8 +28,11 @@ export function AppModal({
   description,
   onClose,
   children,
+  footer,
   size = "md",
   closeOnOverlayClick = true,
+  bodyClassName = "",
+  contentClassName = "",
 }: AppModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -51,9 +58,9 @@ export function AppModal({
       />
       
       {/* Modal */}
-      <div className={`relative w-full ${sizeClasses[size]} max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-xl border border-surface-100/80 modal-enter`}>
+      <div className={`relative w-full ${sizeClasses[size]} max-h-[86vh] flex flex-col rounded-[28px] neo-surface modal-enter ${bodyClassName}`}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-surface-100/60 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-white/40 px-6 py-4 flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
             {description && (
@@ -62,16 +69,23 @@ export function AppModal({
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-surface-100 hover:text-ink-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-ink-400 transition-all hover:bg-surface-100 hover:text-ink-600 active:scale-95"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
         
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className={`flex-1 overflow-y-auto scrollbar-none px-6 py-4 ${contentClassName}`}>
           {children}
         </div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="border-t border-white/40 px-6 py-4 bg-white/80 backdrop-blur-sm rounded-b-[28px] flex-shrink-0">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

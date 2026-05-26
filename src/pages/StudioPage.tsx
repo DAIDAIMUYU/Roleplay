@@ -269,7 +269,7 @@ export function StudioPage() {
             setShowCharEditor(false);
             setEditingChar(null);
           }}
-          size="lg"
+          size="wide"
         >
           <CharacterEditor
             character={editingChar}

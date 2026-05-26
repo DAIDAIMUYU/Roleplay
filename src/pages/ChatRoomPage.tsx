@@ -659,7 +659,9 @@ export function ChatRoomPage() {
 
   return (
     <div className="flex h-full bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3 gap-3">
-      <div className={`flex-shrink-0 overflow-y-auto rounded-2xl border border-white/70 bg-white/75 shadow-sm backdrop-blur-xl transition-all duration-200 ${sessionsCollapsed ? "w-16" : "w-60"}`}>
+      <div className={`flex-shrink-0 overflow-y-auto scrollbar-none neo-surface transition-all duration-200 ${sessionsCollapsed ? "w-16" : "w-60"}`}
+        style={{ borderRadius: '24px' }}
+      >
         {sessionsCollapsed ? (
           <div className="flex h-full flex-col items-center py-3">
             <button
@@ -802,7 +804,9 @@ export function ChatRoomPage() {
       </div>
     </div>
 
-      <div className={`flex-shrink-0 overflow-y-auto rounded-2xl border border-white/70 bg-white/75 shadow-lg shadow-blue-100/40 backdrop-blur-xl transition-all duration-200 ${contextCollapsed ? "w-12" : "w-72"}`}>
+      <div className={`flex-shrink-0 overflow-y-auto scrollbar-none neo-surface transition-all duration-200 ${contextCollapsed ? "w-12" : "w-72"}`}
+        style={{ borderRadius: '24px' }}
+      >
         {contextCollapsed ? (
           <div className="flex h-full flex-col items-center py-3">
             <SidebarCollapseButton 
