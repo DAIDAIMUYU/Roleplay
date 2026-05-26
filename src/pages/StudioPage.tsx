@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Palette, Users, FileText, BookOpen, Brain } from "lucide-react";
 import { useAuth } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
+import { AppModal } from "../shared/components/AppModal";
 import { useCharacters } from "../features/roleplay/hooks/useCharacters";
 import { useTemplates } from "../features/roleplay/hooks/useTemplates";
 import { useWorldbooks } from "../features/roleplay/hooks/useWorldbooks";
@@ -260,76 +261,131 @@ export function StudioPage() {
       )}
 
       {showCharEditor && (
-        <CharacterEditor
-          character={editingChar}
+        <AppModal
+          open={showCharEditor}
+          title={editingChar ? "编辑角色" : "创建角色"}
+          description="设置角色的身份、性格、说话风格和基础规则"
           onClose={() => {
             setShowCharEditor(false);
             setEditingChar(null);
           }}
-          onSave={async (name, card, tags) => {
-            if (editingChar) await chars.update(editingChar.id, name, card, tags);
-            else await chars.create(name, card, tags);
-          }}
-        />
+          size="lg"
+        >
+          <CharacterEditor
+            character={editingChar}
+            onClose={() => {
+              setShowCharEditor(false);
+              setEditingChar(null);
+            }}
+            onSave={async (name, card, tags) => {
+              if (editingChar) await chars.update(editingChar.id, name, card, tags);
+              else await chars.create(name, card, tags);
+            }}
+          />
+        </AppModal>
       )}
 
       {showTplEditor && (
-        <TemplateEditor
-          template={editingTpl}
-          categories={tmpls.categories}
+        <AppModal
+          open={showTplEditor}
+          title={editingTpl ? "编辑提示词模板" : "创建提示词模板"}
+          description="设置提示词模板的内容和分类"
           onClose={() => {
             setShowTplEditor(false);
             setEditingTpl(null);
           }}
-          onSave={async (title, content, category, tags, description) => {
-            if (editingTpl) await tmpls.update(editingTpl.id, title, content, category, tags, description);
-            else await tmpls.create(title, content, category, tags, description);
-          }}
-        />
+          size="lg"
+        >
+          <TemplateEditor
+            template={editingTpl}
+            categories={tmpls.categories}
+            onClose={() => {
+              setShowTplEditor(false);
+              setEditingTpl(null);
+            }}
+            onSave={async (title, content, category, tags, description) => {
+              if (editingTpl) await tmpls.update(editingTpl.id, title, content, category, tags, description);
+              else await tmpls.create(title, content, category, tags, description);
+            }}
+          />
+        </AppModal>
       )}
 
       {showWbModal && (
-        <WbNameModal
-          worldbook={editingWb}
+        <AppModal
+          open={showWbModal}
+          title={editingWb ? "编辑世界书" : "创建世界书"}
+          description="设置世界书的名称和描述"
           onClose={() => {
             setShowWbModal(false);
             setEditingWb(null);
           }}
-          onSave={(name, desc) => {
-            if (editingWb) void wbs.updateWb(editingWb.id, name, desc);
-            else void wbs.createWb(name, desc);
-          }}
-        />
+          size="sm"
+        >
+          <WbNameModal
+            worldbook={editingWb}
+            onClose={() => {
+              setShowWbModal(false);
+              setEditingWb(null);
+            }}
+            onSave={(name, desc) => {
+              if (editingWb) void wbs.updateWb(editingWb.id, name, desc);
+              else void wbs.createWb(name, desc);
+            }}
+          />
+        </AppModal>
       )}
 
       {showEntryEditor && activeWb && (
-        <WorldbookEntryEditor
-          entry={editingEntry}
-          worldbook={activeWb}
+        <AppModal
+          open={showEntryEditor}
+          title={editingEntry ? "编辑世界书条目" : "创建世界书条目"}
+          description={`在世界书"${activeWb.name}"中添加条目`}
           onClose={() => {
             setShowEntryEditor(false);
             setEditingEntry(null);
           }}
-          onSave={async (title, content, triggers, priority, category) => {
-            if (editingEntry) await wbs.updateEntry(editingEntry.id, title, content, triggers, priority, undefined, category);
-            else await wbs.createEntry(activeWb.id, title, content, triggers, priority, category);
-          }}
-        />
+          size="lg"
+        >
+          <WorldbookEntryEditor
+            entry={editingEntry}
+            worldbook={activeWb}
+            onClose={() => {
+              setShowEntryEditor(false);
+              setEditingEntry(null);
+            }}
+            onSave={async (title, content, triggers, priority, category) => {
+              if (editingEntry) await wbs.updateEntry(editingEntry.id, title, content, triggers, priority, undefined, category);
+              else await wbs.createEntry(activeWb.id, title, content, triggers, priority, category);
+            }}
+          />
+        </AppModal>
       )}
 
       {showMemEditor && (
-        <MemoryEditor
-          memory={editingMem}
-          types={mems.types}
+        <AppModal
+          open={showMemEditor}
+          title={editingMem ? "编辑记忆" : "创建记忆"}
+          description="设置记忆的内容、类型和重要性"
           onClose={() => {
             setShowMemEditor(false);
             setEditingMem(null);
           }}
-          onSave={async (content, type, title, salience) => {
-            if (editingMem) await mems.update(editingMem.id, content, type, title, salience);
-            else await mems.create(content, type, title, salience);
-          }}
-        />
+          size="md"
+        >
+          <MemoryEditor
+            memory={editingMem}
+            types={mems.types}
+            onClose={() => {
+              setShowMemEditor(false);
+              setEditingMem(null);
+            }}
+            onSave={async (content, type, title, salience) => {
+              if (editingMem) await mems.update(editingMem.id, content, type, title, salience);
+              else await mems.create(content, type, title, salience);
+            }}
+          />
+        </AppModal>
       )}
     </div>
   );

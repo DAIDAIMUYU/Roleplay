@@ -32,7 +32,7 @@ export function DesktopSidebar() {
               </div>
               <span className="text-base font-semibold text-ink-900">角色酒馆</span>
             </Link>
-            <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} />
+            <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" />
           </div>
         )}
       </div>
@@ -77,7 +77,7 @@ export function DesktopSidebar() {
 
       <div className={`border-t border-sky-100/60 px-3 py-4 ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
-          <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} />
+          <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" floating />
         ) : (
           <>
             <div className="flex items-center justify-between">

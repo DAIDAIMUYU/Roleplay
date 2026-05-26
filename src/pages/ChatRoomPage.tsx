@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Drama, MessageCircle, Palette, Plus, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Drama, KeyRound, MessageCircle, Palette, Plus, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth";
 import { supabase } from "../features/auth/supabaseClient";
@@ -417,20 +417,52 @@ export function ChatRoomPage() {
             <>
               <h3 className="text-lg font-semibold text-ink-700">开始你的第一段对话</h3>
               <p className="mt-1.5 max-w-xs text-sm text-ink-300">
-                先创建一个会话，选择角色后即可开始聊天
+                {!chat.apiConfigured 
+                  ? "连接 API 后才能使用真实模型回复，或继续使用本地预览模式"
+                  : "先创建一个会话，选择角色后即可开始聊天"}
               </p>
-              <div className="mt-5 flex flex-col gap-2">
-                <button
-                  onClick={handleCreateSession}
-                  className="btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  新建会话
-                </button>
-                <Link to="/studio" className="btn-ghost inline-flex items-center gap-2 px-6 py-2.5 text-sm">
-                  <Palette className="h-4 w-4" />
-                  去创作工坊创建角色
-                </Link>
+              <div className="mt-5 flex flex-col gap-3 max-w-xs w-full">
+                {/* API configuration prompt - show first if not configured */}
+                {!chat.apiConfigured && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-light/30 p-4 text-left">
+                    <div className="flex items-center gap-2 mb-2">
+                      <KeyRound className="h-4 w-4 text-amber-500" />
+                      <span className="text-sm font-semibold text-ink-800">先配置 API</span>
+                    </div>
+                    <p className="text-xs text-ink-500 mb-3">
+                      连接 DeepSeek、OpenAI-compatible 或其他 Provider 后，才能使用真实模型回复。你也可以继续使用本地预览模式测试流程。
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <Link to="/settings" className="btn-primary inline-flex items-center justify-center gap-2 py-2.5 text-sm">
+                        <KeyRound className="h-4 w-4" />
+                        去配置 API
+                      </Link>
+                      <button
+                        onClick={handleCreateSession}
+                        className="btn-ghost inline-flex items-center justify-center gap-2 py-2 text-sm"
+                      >
+                        继续本地预览
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Session creation - show if API configured or as secondary option */}
+                {chat.apiConfigured && (
+                  <>
+                    <button
+                      onClick={handleCreateSession}
+                      className="btn-primary inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                      新建会话
+                    </button>
+                    <Link to="/studio" className="btn-ghost inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm">
+                      <Palette className="h-4 w-4" />
+                      去创作工坊创建角色
+                    </Link>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -656,14 +688,14 @@ export function ChatRoomPage() {
               ))}
             </div>
             <div className="border-t border-sky-100/60 pt-2">
-              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} />
+              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} side="left" />
             </div>
           </div>
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-sky-100/60 px-3 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-sky-500">会话列表</span>
-              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} />
+              <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} side="left" />
             </div>
             <div className="flex-1 overflow-y-auto">
               <SessionList
@@ -773,13 +805,13 @@ export function ChatRoomPage() {
       <div className={`flex-shrink-0 overflow-y-auto rounded-2xl border border-white/70 bg-white/75 shadow-lg shadow-blue-100/40 backdrop-blur-xl transition-all duration-200 ${contextCollapsed ? "w-12" : "w-72"}`}>
         {contextCollapsed ? (
           <div className="flex h-full flex-col items-center py-3">
-            <button
-              onClick={toggleContextCollapsed}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-sky-50 text-brand-500 shadow-sm transition-colors hover:from-brand-100 hover:to-sky-100"
-              title="展开上下文控制台"
-            >
-              <ChevronDown className="h-4 w-4 rotate-90" />
-            </button>
+            <SidebarCollapseButton 
+              collapsed={contextCollapsed} 
+              onToggle={toggleContextCollapsed} 
+              side="right"
+              floating
+              ariaLabel="展开上下文控制台"
+            />
           </div>
         ) : (
           <div className="flex h-full flex-col">
@@ -788,7 +820,12 @@ export function ChatRoomPage() {
                 <span className="text-xs font-semibold text-ink-700">上下文</span>
                 <p className="text-[10px] text-ink-400">角色设定与上下文</p>
               </div>
-              <SidebarCollapseButton collapsed={contextCollapsed} onToggle={toggleContextCollapsed} />
+              <SidebarCollapseButton 
+                collapsed={contextCollapsed} 
+                onToggle={toggleContextCollapsed} 
+                side="right"
+                ariaLabel="收起上下文控制台"
+              />
             </div>
             <div className="flex-1 overflow-y-auto">
               <ContextPreview {...contextProps} />
