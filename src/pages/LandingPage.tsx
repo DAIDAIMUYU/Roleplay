@@ -5,9 +5,15 @@ import {
   Cloud,
   Database,
   Drama,
+  ExternalLink,
+  FileText,
+  Github,
   HardDrive,
+  HelpCircle,
   History,
   KeyRound,
+  MessageCircle,
+  Palette,
   ShieldAlert,
   Sparkles,
   Upload,
@@ -48,25 +54,118 @@ export function LandingPage() {
           本地优先的<br className="md:hidden" /> AI 角色酒馆
         </h1>
         <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-ink-400 md:text-base">
-          不登录也能创建角色、保存数据、开始聊天。<br className="hidden md:block" />
-          登录后可选云端同步。
+          创建角色、配置世界书与记忆，在本地保存你的角色扮演数据。<br className="hidden md:block" />
+          不登录也能使用本地模式；想体验真实 AI 聊天，通常需要先配置 API。
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link to="/roleplay" className="btn-primary px-8 py-3 text-base font-semibold shadow-lg shadow-brand-200/50">
             <Sparkles className="mr-1.5 h-5 w-5" />
             开始本地使用
           </Link>
+          <Link to="/settings" className="btn-secondary px-6 py-3 text-sm">
+            <KeyRound className="mr-1.5 h-4 w-4" />
+            配置 API
+          </Link>
           {!user && (
-            <Link to="/login" className="btn-secondary px-6 py-3 text-sm">
+            <Link to="/login" className="btn-ghost px-6 py-3 text-sm">
               <Cloud className="mr-1.5 h-4 w-4" />
               登录开启同步
             </Link>
           )}
-          {user && (
-            <Link to="/settings" className="btn-secondary px-6 py-3 text-sm">
-              管理设置
+        </div>
+      </div>
+
+      {/* ─── How to Start ─── */}
+      <div className="mb-10">
+        <h2 className="mb-2 text-center text-lg font-bold text-ink-900">如何快速开始聊天？</h2>
+        <p className="mb-6 text-center text-sm text-ink-400">只需三步，即可开始你的角色扮演之旅</p>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Step 1 */}
+          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-500">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-brand-500">步骤 1</span>
+                <h3 className="text-sm font-semibold text-ink-900">配置 API</h3>
+              </div>
+            </div>
+            <p className="mb-4 text-xs leading-relaxed text-ink-400">
+              选择 DeepSeek、OpenAI-compatible 或其他 Provider，填入你的 API Key。未配置 API 时仍可使用本地预览模式。
+            </p>
+            <Link to="/settings" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
+              去配置 API
+              <ExternalLink className="h-3 w-3" />
             </Link>
-          )}
+          </div>
+
+          {/* Step 2 */}
+          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-sky-500">
+                <Palette className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-sky-500">步骤 2</span>
+                <h3 className="text-sm font-semibold text-ink-900">创建角色</h3>
+              </div>
+            </div>
+            <p className="mb-4 text-xs leading-relaxed text-ink-400">
+              在创作工坊创建角色卡，设置身份、性格、说话风格和基础规则。
+            </p>
+            <Link to="/studio" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
+              去创作工坊
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {/* Step 3 */}
+          <div className="group relative rounded-2xl border border-surface-100/80 bg-white/80 p-5 shadow-sm transition-all hover:border-brand-200 hover:shadow-md">
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-emerald-500">步骤 3</span>
+                <h3 className="text-sm font-semibold text-ink-900">开始聊天</h3>
+              </div>
+            </div>
+            <p className="mb-4 text-xs leading-relaxed text-ink-400">
+              进入聊天室，选择角色并创建会话后即可开始角色扮演。
+            </p>
+            <Link to="/roleplay" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
+              去聊天室
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Need Help ─── */}
+      <div className="mb-10 rounded-2xl border border-surface-100/80 bg-gradient-to-r from-brand-50/30 to-amber-light/20 p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <HelpCircle className="h-5 w-5 text-brand-400" />
+          <h3 className="text-sm font-semibold text-ink-900">需要帮助？</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Link to="/settings/data" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+            <Upload className="h-4 w-4 text-ink-400" />
+            数据备份与恢复
+          </Link>
+          <Link to="/settings" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+            <KeyRound className="h-4 w-4 text-ink-400" />
+            API 配置说明
+          </Link>
+          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+            <Github className="h-4 w-4 text-ink-400" />
+            GitHub
+          </a>
+          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl bg-white/80 p-3 text-xs text-ink-600 transition-colors hover:bg-white hover:text-brand-600">
+            <FileText className="h-4 w-4 text-ink-400" />
+            用户文档
+          </a>
         </div>
       </div>
 

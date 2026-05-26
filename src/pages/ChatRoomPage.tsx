@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Drama, MessageCircle, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Drama, MessageCircle, Palette, Plus, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth";
 import { supabase } from "../features/auth/supabaseClient";
@@ -16,7 +16,6 @@ import {
   selectionFromCredential,
 } from "../features/roleplay/services/hostedCredentialsService";
 import { ModeBadge } from "../shared/components/ModeBadge";
-import { EmptyState } from "../shared/components/EmptyState";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
 import * as Repo from "../features/roleplay/repositories/roleplayRepository";
 import * as LocalRepo from "../features/roleplay/repositories/localRoleplayRepository";
@@ -395,11 +394,43 @@ export function ChatRoomPage() {
     <>
       {renderLoadOlderButton()}
       {chat.messages.length === 0 ? (
-        <EmptyState
-          icon={<MessageCircle className="h-10 w-10" />}
-          title={hasActiveSession ? "开始聊天" : "开始聊天，请先创建会话"}
-          description={!hasActiveSession ? "点击 + 创建" : chat.isDemo ? "本地模式 · 使用本地预览回复" : chat.apiConfigured ? "输入消息开始角色扮演" : "请先在设置中心启用 API 配置"}
-        />
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="mb-4 text-ink-200">
+            <MessageCircle className="h-10 w-10" />
+          </div>
+          {hasActiveSession ? (
+            <>
+              <h3 className="text-lg font-semibold text-ink-700">开始聊天</h3>
+              <p className="mt-1.5 max-w-xs text-sm text-ink-300">
+                {chat.isDemo
+                  ? "本地模式 · 使用本地预览回复"
+                  : chat.apiConfigured
+                  ? "输入消息开始角色扮演"
+                  : "请先在设置中心启用 API 配置"}
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-semibold text-ink-700">开始你的第一段对话</h3>
+              <p className="mt-1.5 max-w-xs text-sm text-ink-300">
+                先创建一个会话，选择角色后即可开始聊天
+              </p>
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  onClick={handleCreateSession}
+                  className="btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm"
+                >
+                  <Plus className="h-4 w-4" />
+                  新建会话
+                </button>
+                <Link to="/studio" className="btn-ghost inline-flex items-center gap-2 px-6 py-2.5 text-sm">
+                  <Palette className="h-4 w-4" />
+                  去创作工坊创建角色
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       ) : (
         chat.messages.map((message, index) => renderMessageBubble(message, index))
       )}
@@ -411,41 +442,66 @@ export function ChatRoomPage() {
     return (
       <div className="flex h-dvh flex-col bg-surface-50 pb-safe-bottom">
         <div className="flex items-center gap-2 border-b border-surface-100 bg-white px-3 py-2.5">
-          <button onClick={() => setShowMobileSessions((value) => !value)} className="btn-ghost p-1.5 text-xs">
+          <button onClick={() => setShowMobileSessions((value) => !value)} className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100">
             <Drama className="h-4 w-4" />
+            <span>会话</span>
+            <ChevronDown className="h-3 w-3" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-ink-900">{chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天室"}</p>
+            <p className="truncate text-sm font-medium text-ink-900">
+              {chat.activeSessionId
+                ? chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天室"
+                : "聊天室"}
+            </p>
           </div>
           {providerConfig.storageMode === "hosted_encrypted" && (
             <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管·非流式</span>
           )}
           <ModeBadge />
-          <button onClick={() => setShowMobileContext((value) => !value)} className="btn-ghost p-1.5 text-xs">
-            <ChevronDown className="h-4 w-4" />
-          </button>
         </div>
 
         {showMobileSessions && (
-          <div className="absolute left-0 top-0 z-30 h-dvh w-72 overflow-y-auto bg-white shadow-modal">
+          <div className="absolute left-0 top-0 z-30 flex h-dvh w-72 flex-col bg-white shadow-modal">
             <div className="flex items-center justify-between border-b p-3">
               <span className="text-sm font-medium">会话</span>
               <button onClick={() => setShowMobileSessions(false)} className="btn-ghost p-1 text-xs">关闭</button>
             </div>
-            <SessionList
-              sessions={chat.sessions}
-              activeSessionId={chat.activeSessionId}
-              onSelect={(id) => {
-                void chat.selectSession(id);
-                setShowMobileSessions(false);
-              }}
-              onCreate={() => {
-                handleCreateSession();
-                setShowMobileSessions(false);
-              }}
-              onDelete={chat.deleteSession}
-              loading={false}
-            />
+            <div className="flex-1 overflow-y-auto">
+              <SessionList
+                sessions={chat.sessions}
+                activeSessionId={chat.activeSessionId}
+                onSelect={(id) => {
+                  void chat.selectSession(id);
+                  setShowMobileSessions(false);
+                }}
+                onCreate={() => {
+                  handleCreateSession();
+                  setShowMobileSessions(false);
+                }}
+                onDelete={chat.deleteSession}
+                loading={false}
+              />
+            </div>
+            <div className="border-t p-3 space-y-2">
+              <button
+                onClick={() => {
+                  handleCreateSession();
+                  setShowMobileSessions(false);
+                }}
+                className="btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                新建会话
+              </button>
+              <Link
+                to="/studio"
+                onClick={() => setShowMobileSessions(false)}
+                className="btn-ghost flex w-full items-center justify-center gap-2 py-2 text-xs"
+              >
+                <Palette className="h-3.5 w-3.5" />
+                去创作工坊创建角色
+              </Link>
+            </div>
           </div>
         )}
 
