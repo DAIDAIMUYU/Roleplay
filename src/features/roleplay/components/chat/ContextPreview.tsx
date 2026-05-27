@@ -26,6 +26,7 @@ import { supabase } from "../../../auth/supabaseClient";
 import * as Repo from "../../repositories/roleplayRepository";
 import * as LocalRepo from "../../repositories/localRoleplayRepository";
 import { ContextSectionCard } from "../../../../shared/components/ContextSectionCard";
+import { AppModal } from "../../../../shared/components/AppModal";
 
 interface ContextPreviewProps {
   sessionTitle: string;
@@ -173,6 +174,9 @@ export function ContextPreview(props: ContextPreviewProps) {
   const [showWbPicker, setShowWbPicker] = useState(false);
   const [showMemPicker, setShowMemPicker] = useState(false);
   const [showSummaryEditor, setShowSummaryEditor] = useState(false);
+  const [compressionOpen, setCompressionOpen] = useState<"confirm" | "generating" | "preview" | "error" | "success" | null>(null);
+  const [compressionEditText, setCompressionEditText] = useState("");
+  const [compressionErrorMsg, setCompressionErrorMsg] = useState("");
   const [pickerTpls, setPickerTpls] = useState<PromptTemplateRow[]>([]);
   const [pickerWbs, setPickerWbs] = useState<WorldbookRow[]>([]);
   const [pickerMems, setPickerMems] = useState<MemoryRow[]>([]);
@@ -529,17 +533,15 @@ export function ContextPreview(props: ContextPreviewProps) {
                 )}
 
                 <button
-                  onClick={async () => {
+                  onClick={() => {
                     if (compressBusy) return;
-                    if (!contextWindowEstimate.canCompress) return;
-                    if (!window.confirm("压缩上下文？\n\n系统会将较早的聊天记录整理成会话摘要。原始消息不会删除。摘要应用后，稳定前缀会变化一次，后续对话成本通常会降低。")) return;
-                    const result = await onCompressContext();
-                    if (result) {
-                      const apply = window.confirm("摘要已生成，是否应用？\n\n点击[确定]将保存并启用新摘要。点击[取消]将丢弃预览。");
-                      if (apply && onSaveSummaryText) {
-                        await onSaveSummaryText(result);
-                      }
+                    const est = contextWindowEstimate;
+                    if (!est?.canCompress) {
+                      setCompressionErrorMsg(est?.reason || "当前会话暂不需要压缩。");
+                      setCompressionOpen("error");
+                      return;
                     }
+                    setCompressionOpen("confirm");
                   }}
                   disabled={compressBusy}
                   className={`neo-button flex w-full items-center justify-center gap-1.5 rounded-[16px] px-3 py-2 text-xs font-medium transition-all ${
@@ -1132,6 +1134,122 @@ export function ContextPreview(props: ContextPreviewProps) {
           </button>
         </PickerModal>
       )}
+
+      {/* ── Compression Confirm Modal ── */}
+      <AppModal
+        open={compressionOpen === "confirm"}
+        title="压缩上下文？"
+        description="系统会把较早的聊天记录整理成会话摘要。原始消息不会删除。应用摘要后，稳定前缀会变化一次，后续连续对话的缓存命中率通常会逐步恢复。"
+        onClose={() => setCompressionOpen(null)}
+        size="sm"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setCompressionOpen(null)} className="neo-button flex-1 px-4 py-2 text-xs font-medium text-ink-500">取消</button>
+            <button onClick={async () => {
+              setCompressionOpen("generating");
+              const result = await onCompressContext();
+              if (result) {
+                setCompressionEditText(result);
+                setCompressionOpen("preview");
+              } else {
+                setCompressionErrorMsg("压缩生成失败，请检查 API 配置后重试。");
+                setCompressionOpen("error");
+              }
+            }} className="neo-button-primary flex flex-1 items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold">
+              开始压缩
+            </button>
+          </div>
+        }
+      >{null}</AppModal>
+
+      {/* ── Compression Generating ── */}
+      <AppModal
+        open={compressionOpen === "generating"}
+        title="正在压缩上下文"
+        description="正在整理旧剧情、角色关系、伏笔和下一轮对话注意事项..."
+        onClose={() => {}}
+        size="sm"
+        closeOnOverlayClick={false}
+        footer={null}
+      >
+        <div className="flex items-center justify-center py-4">
+          <RefreshCw className="h-6 w-6 animate-spin text-brand-500" />
+        </div>
+      </AppModal>
+
+      {/* ── Compression Preview Modal ── */}
+      <AppModal
+        open={compressionOpen === "preview"}
+        title="摘要预览"
+        description="你可以直接修改这份摘要。点击应用后，它会成为新的会话摘要。原始消息不会删除。"
+        onClose={() => setCompressionOpen(null)}
+        size="lg"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setCompressionOpen(null)} className="neo-button flex-1 px-4 py-2 text-xs font-medium text-ink-500">取消</button>
+            <button onClick={async () => {
+              setCompressionOpen("generating");
+              const result = await onCompressContext();
+              if (result) {
+                setCompressionEditText(result);
+                setCompressionOpen("preview");
+              } else {
+                setCompressionErrorMsg("重新生成失败，请重试。");
+                setCompressionOpen("error");
+              }
+            }} className="neo-button flex-1 px-4 py-2 text-xs font-medium text-brand-600 hover:text-brand-700">
+              重新生成
+            </button>
+            <button onClick={async () => {
+              const trimmed = compressionEditText.trim();
+              if (!trimmed) {
+                setCompressionErrorMsg("摘要不能为空。");
+                setCompressionOpen("error");
+                return;
+              }
+              await onSaveSummaryText(trimmed);
+              setCompressionOpen("success");
+              setTimeout(() => setCompressionOpen(null), 2000);
+            }} className="neo-button-primary flex flex-1 items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold">
+              应用摘要
+            </button>
+          </div>
+        }
+      >
+        <textarea
+          value={compressionEditText}
+          onChange={(e) => setCompressionEditText(e.target.value)}
+          rows={18}
+          className="neo-input w-full resize-y rounded-[16px] px-3 py-2 text-xs"
+          style={{ minHeight: "200px", maxHeight: "60vh" }}
+        />
+      </AppModal>
+
+      {/* ── Compression Error ── */}
+      <AppModal
+        open={compressionOpen === "error"}
+        title="提示"
+        onClose={() => setCompressionOpen(null)}
+        size="sm"
+        footer={
+          <button onClick={() => setCompressionOpen(null)} className="neo-button-primary w-full px-4 py-2 text-xs font-semibold">知道了</button>
+        }
+      >
+        <p className="text-sm text-ink-600">{compressionErrorMsg}</p>
+      </AppModal>
+
+      {/* ── Compression Success ── */}
+      <AppModal
+        open={compressionOpen === "success"}
+        title="摘要已应用"
+        description="稳定前缀已更新，后续连续聊天缓存命中率会逐步恢复。"
+        onClose={() => setCompressionOpen(null)}
+        size="sm"
+        footer={
+          <button onClick={() => setCompressionOpen(null)} className="neo-button-primary w-full px-4 py-2 text-xs font-semibold">知道了</button>
+        }
+      >{null}</AppModal>
+
     </div>
   );
 }

@@ -767,6 +767,7 @@ export function useChatSession(
         isBalanceLoading: false,
         balanceError: null,
       }));
+      void setTimeout(() => computeContextWindowEstimate(), 0);
     } catch (error) {
       setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
     }
@@ -1007,6 +1008,7 @@ export function useChatSession(
       }
     }
     await syncMeta({ _summary_enabled: !!text });
+    void setTimeout(() => computeContextWindowEstimate(), 0);
   }, [isLocalMode, syncMeta, userId]);
 
   const clearSummary = useCallback(async () => {
@@ -1020,6 +1022,7 @@ export function useChatSession(
       }
     }
     await syncMeta({ _summary_enabled: false });
+    void setTimeout(() => computeContextWindowEstimate(), 0);
   }, [isLocalMode, syncMeta, userId]);
 
   const generateSummary = useCallback(async (): Promise<string | null> => {
