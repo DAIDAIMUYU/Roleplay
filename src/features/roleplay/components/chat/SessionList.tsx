@@ -35,11 +35,11 @@ export function SessionList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-surface-100 p-3">
+      <div className="flex items-center justify-between border-b border-white/45 px-4 py-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-300">会话列表</h3>
         <button
           onClick={onCreate}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-brand-500 transition-colors hover:bg-brand-100"
+          className="neo-button flex h-9 w-9 items-center justify-center text-brand-500"
           title="新建会话"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -54,7 +54,7 @@ export function SessionList({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索会话..."
-            className="w-full rounded-input border border-surface-200 bg-surface-50 py-1.5 pl-7 pr-6 text-xs focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            className="neo-input w-full py-2 pl-8 pr-7 text-xs focus:border-brand-400"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -64,7 +64,7 @@ export function SessionList({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="scrollbar-none flex-1 overflow-y-auto px-2 pb-3">
         {loading ? (
           <p className="py-8 text-center text-xs text-ink-300">加载中...</p>
         ) : filtered.length === 0 ? (
@@ -76,13 +76,13 @@ export function SessionList({
             <button
               key={session.id}
               onClick={() => onSelect(session.id)}
-              className={`flex w-full items-start gap-2.5 border-r-2 px-3 py-2.5 text-left transition-colors ${
+              className={`mb-2 flex w-full items-start gap-3 rounded-[20px] px-3 py-3 text-left transition-all ${
                 session.id === activeSessionId
-                  ? "border-brand-500 bg-brand-50"
-                  : "border-transparent hover:bg-surface-50"
+                  ? "neo-button-pressed text-brand-700"
+                  : "neo-button text-ink-600 hover:text-ink-700"
               }`}
             >
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface-100 text-sm">
+              <div className="neo-panel-soft flex h-10 w-10 flex-shrink-0 items-center justify-center text-sm">
                 {session.characterEmoji || <MessageCircle className="h-4 w-4 text-ink-300" />}
               </div>
               <div className="min-w-0 flex-1">

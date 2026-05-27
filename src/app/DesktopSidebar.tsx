@@ -18,7 +18,7 @@ export function DesktopSidebar() {
   const [collapsed, toggleCollapsed] = usePersistentCollapsedState("roleplay.sidebar.collapsed", false);
 
   return (
-    <aside className={`flex h-full flex-shrink-0 flex-col neo-surface transition-all duration-200 ${collapsed ? "w-16" : "w-56"}`}
+    <aside className={`flex h-full flex-shrink-0 flex-col neo-surface transition-all duration-200 ${collapsed ? "w-16" : "w-60"}`}
       style={{ borderRadius: '28px' }}
     >
       <div className={`px-4 py-5 ${collapsed ? "flex justify-center" : ""}`}>
@@ -43,16 +43,16 @@ export function DesktopSidebar() {
         )}
       </div>
 
-      <nav className={`flex-1 space-y-1 scrollbar-none overflow-y-auto ${collapsed ? "px-2" : "px-2"}`}>
+      <nav className="scrollbar-none flex-1 space-y-2 overflow-y-auto px-2.5 pb-2 pt-2">
         {navItems.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === "/"}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
+              `flex h-11 items-center gap-3 px-3 text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? "neo-pressed text-brand-700"
+                  ? "neo-button-pressed text-brand-700"
                   : "neo-button text-ink-500 hover:text-ink-700"
               } ${collapsed ? "justify-center" : ""}`
             }
@@ -68,9 +68,9 @@ export function DesktopSidebar() {
           <NavLink
             to="/admin"
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
+              `flex h-11 items-center gap-3 px-3 text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? "neo-pressed text-brand-700"
+                  ? "neo-button-pressed text-brand-700"
                   : "neo-button text-ink-500 hover:text-ink-700"
               } ${collapsed ? "justify-center" : ""}`
             }
@@ -87,7 +87,7 @@ export function DesktopSidebar() {
         {collapsed ? (
           <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" floating />
         ) : (
-          <div className="neo-surface-soft p-3" style={{ borderRadius: '18px' }}>
+          <div className="neo-surface-soft p-3.5" style={{ borderRadius: '20px' }}>
             <div className="flex items-center justify-between">
               <span className="text-xs text-ink-400">
                 {isGuestOrDemo ? "网页本地模式" : isOwner ? "站主" : isAdmin ? "管理员" : "云端账号"}

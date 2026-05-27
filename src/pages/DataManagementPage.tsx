@@ -193,9 +193,10 @@ export function DataManagementPage() {
 
   if (isGuestOrDemo || !userId) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
+      <div className="page-container">
+        <div className="neo-page-shell px-5 py-6 md:px-7 md:py-7">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
             <Link to="/settings" className="btn-ghost text-xs">
               <ArrowLeft className="h-4 w-4" />
               返回设置
@@ -207,17 +208,19 @@ export function DataManagementPage() {
           </div>
           <ModeBadge />
         </div>
-        <div className="card">
-          <p className="text-sm text-ink-500 leading-relaxed">
+          <div className="card">
+            <p className="text-sm text-ink-500 leading-relaxed">
             当前是网页本地模式 / 未登录状态。这里的云端数据管理功能只对当前登录用户自己的 Supabase 数据生效，也不会读取浏览器里的 API Key。
           </p>
+        </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 pb-24 md:py-12 md:pb-12 space-y-6">
+      <div className="page-container space-y-6">
+        <div className="neo-page-shell space-y-6 px-5 py-6 md:px-7 md:py-7">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to="/settings" className="btn-ghost text-xs">
@@ -500,6 +503,7 @@ export function DataManagementPage() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }

@@ -21,8 +21,8 @@ export function SidebarCollapseButton({
   const showRightArrow = side === "left" ? collapsed : !collapsed;
 
   const baseClasses = floating
-    ? "flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-ink-400 shadow-md backdrop-blur-sm transition-all duration-150 ease-out hover:bg-white hover:text-ink-600 hover:shadow-lg active:scale-95 border border-sky-100/60"
-    : "flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50/80 text-sky-500 transition-all duration-150 ease-out hover:bg-sky-100 hover:text-sky-600 active:scale-95";
+    ? "neo-button flex h-9 w-9 items-center justify-center rounded-full border border-white/75 bg-white/78 text-ink-500 shadow-[0_12px_24px_rgba(148,163,184,0.14)] transition-all duration-[320ms] hover:-translate-y-0.5 hover:text-brand-600 active:translate-y-0"
+    : "neo-button flex h-9 w-9 items-center justify-center rounded-2xl text-sky-500 transition-all duration-[320ms] hover:-translate-y-0.5 hover:text-brand-600 active:translate-y-0";
 
   return (
     <button

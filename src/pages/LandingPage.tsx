@@ -40,18 +40,18 @@ export function LandingPage() {
   const api = getApiSummary();
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-b from-[#eaf5ff] via-[#f7fbff] to-white">
+    <div className="relative overflow-hidden">
       {/* Background decorations */}
       <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-sky-200/50 to-blue-200/30 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-blue-200/40 to-sky-100/30 blur-3xl" />
       <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-indigo-100/30 to-purple-100/20 blur-2xl" />
       <div className="pointer-events-none absolute top-1/4 right-1/4 h-48 w-48 rounded-full bg-gradient-to-br from-sky-100/40 to-blue-50/30 blur-2xl" />
       
-      <div className="relative mx-auto max-w-5xl px-4 py-8 pb-24 md:py-14 md:pb-14">
+      <div className="page-container relative px-7 py-8 md:px-10 md:py-10">
 
       {/* ─── Hero ─── */}
       <div className="mb-10 text-center">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-brand-50/80 px-4 py-1.5 text-sm font-medium text-brand-600 backdrop-blur-sm">
+        <div className="neo-pill mb-2 inline-flex items-center gap-2 bg-brand-50/80 text-sm text-brand-600">
           <Drama className="h-4 w-4" />
           角色酒馆
           <span className="mx-1 text-brand-300">·</span>
@@ -60,7 +60,7 @@ export function LandingPage() {
         <h1 className="mt-4 text-3xl font-bold leading-tight text-ink-900 md:text-5xl">
           本地优先的<br className="md:hidden" /> AI 角色酒馆
         </h1>
-        <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-ink-400 md:text-base">
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-ink-400 md:text-base">
           创建角色、配置世界书与记忆，在本地保存你的角色扮演数据。<br className="hidden md:block" />
           不登录也能使用本地模式；想体验真实 AI 聊天，通常需要先配置 API。
         </p>
@@ -89,7 +89,7 @@ export function LandingPage() {
 
         <div className="grid gap-4 md:grid-cols-3">
           {/* Step 1 */}
-          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
+          <div className="neo-panel-soft group relative p-5 transition-all hover:-translate-y-0.5 hover:border-brand-200/70 hover:shadow-lg hover:shadow-blue-100/30">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-500">
                 <KeyRound className="h-5 w-5" />
@@ -109,7 +109,7 @@ export function LandingPage() {
           </div>
 
           {/* Step 2 */}
-          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
+          <div className="neo-panel-soft group relative p-5 transition-all hover:-translate-y-0.5 hover:border-brand-200/70 hover:shadow-lg hover:shadow-blue-100/30">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-50 text-sky-500">
                 <Palette className="h-5 w-5" />
@@ -129,7 +129,7 @@ export function LandingPage() {
           </div>
 
           {/* Step 3 */}
-          <div className="group relative rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur-md transition-all hover:border-brand-200 hover:shadow-md hover:shadow-blue-100/40">
+          <div className="neo-panel-soft group relative p-5 transition-all hover:-translate-y-0.5 hover:border-brand-200/70 hover:shadow-lg hover:shadow-blue-100/30">
             <div className="mb-3 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
                 <MessageCircle className="h-5 w-5" />
@@ -151,25 +151,25 @@ export function LandingPage() {
       </div>
 
       {/* ─── Need Help ─── */}
-      <div className="mb-10 rounded-2xl border border-white/60 bg-gradient-to-r from-brand-50/40 to-amber-light/30 p-5 backdrop-blur-md">
+      <div className="neo-panel mb-10 bg-gradient-to-r from-brand-50/40 to-amber-light/30 p-5">
         <div className="mb-4 flex items-center gap-2">
           <HelpCircle className="h-5 w-5 text-brand-400" />
           <h3 className="text-sm font-semibold text-ink-900">需要帮助？</h3>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Link to="/settings/data" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
+          <Link to="/settings/data" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <Upload className="h-4 w-4 text-ink-400" />
             数据备份与恢复
           </Link>
-          <Link to="/settings" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
+          <Link to="/settings" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <KeyRound className="h-4 w-4 text-ink-400" />
             API 配置说明
           </Link>
-          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
+          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <Github className="h-4 w-4 text-ink-400" />
             GitHub
           </a>
-          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/60 p-3 text-xs text-ink-600 backdrop-blur-sm transition-colors hover:bg-white/80 hover:text-brand-600">
+          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <FileText className="h-4 w-4 text-ink-400" />
             用户文档
           </a>
@@ -182,13 +182,13 @@ export function LandingPage() {
 
         <div className="space-y-3">
           {/* Compact status cards */}
-          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+          <div className="neo-panel-soft p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-ink-300" />
                 <span className="text-xs font-medium text-ink-500">数据模式</span>
               </div>
-              <span className="rounded-full bg-surface-100/80 px-2.5 py-0.5 text-xs font-medium text-ink-600">
+              <span className="neo-pill bg-surface-100/80 text-xs text-ink-600">
                 {user ? "云端同步" : "本地优先"}
               </span>
             </div>
@@ -199,7 +199,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+          <div className="neo-panel-soft p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-ink-300" />
@@ -217,7 +217,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur-md">
+          <div className="neo-panel-soft p-4">
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-400" />
               <span className="text-xs font-medium text-ink-500">数据保护提示</span>
@@ -258,7 +258,7 @@ export function LandingPage() {
           当前客户端：网页模式 · 桌面模式与移动 App 暂未推出
         </p>
       </div>
-    </div>
+      </div>
     </div>
   );
 }

@@ -77,14 +77,14 @@ function PickerModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative mx-4 flex max-h-[70vh] w-full max-w-sm flex-col rounded-2xl bg-white p-5 shadow-modal">
+      <div className="neo-panel relative mx-4 flex max-h-[72vh] w-full max-w-sm flex-col p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold">{title}</h3>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-surface-100">
             <X className="h-4 w-4 text-ink-400" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <div className="scrollbar-none flex-1 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
@@ -226,8 +226,8 @@ export function ContextPreview(props: ContextPreviewProps) {
   ];
 
   return (
-    <div className="flex h-full flex-col bg-gradient-to-b from-white/90 to-sky-50/30">
-      <div className="border-b border-sky-100/60 px-4 py-4">
+    <div className="flex h-full flex-col bg-gradient-to-b from-white/80 to-sky-50/25">
+      <div className="border-b border-white/45 px-4 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-sky-50 text-brand-500 shadow-sm">
             <Cpu className="h-4 w-4" />
@@ -241,16 +241,16 @@ export function ContextPreview(props: ContextPreviewProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1 py-1">
+      <div className="scrollbar-none flex-1 overflow-y-auto px-2 py-2">
         {/* Status rows */}
-        <div className="mb-2 space-y-0.5 rounded-xl border border-sky-100/40 bg-white/50 p-2 mx-1">
+        <div className="neo-panel mb-3 space-y-2 p-3">
           {statusRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-colors hover:bg-sky-50/30">
+            <div key={row.label} className="neo-panel-soft flex min-h-[40px] items-center justify-between px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="text-sky-400">{row.icon}</span>
                 <span className="truncate text-[11px] text-ink-500">{row.label}</span>
               </div>
-              <span className="ml-2 max-w-[120px] flex-shrink-0 truncate text-right font-mono text-[11px] text-ink-400">
+              <span className="neo-pill ml-2 max-w-[140px] flex-shrink-0 truncate text-right font-mono text-[11px] text-ink-400">
                 {row.value}
               </span>
             </div>
@@ -264,7 +264,7 @@ export function ContextPreview(props: ContextPreviewProps) {
             defaultOpen
             variant="active"
           >
-            <div className="space-y-0.5 pb-1 text-xs text-ink-400">
+            <div className="space-y-1.5 pb-1 text-xs text-ink-400">
               {card?.identity && <p>身份：{card.identity}</p>}
               {card?.personality && <p className="line-clamp-2">性格：{card.personality}</p>}
               {card?.relationship && (
@@ -281,7 +281,7 @@ export function ContextPreview(props: ContextPreviewProps) {
           {activeTemplate ? (
             <div className="pb-1">
               <p className="mb-1 line-clamp-2 text-xs text-ink-400">{activeTemplate.content.slice(0, 120)}</p>
-              <button onClick={onRemoveTemplate} className="btn-ghost flex items-center gap-1 text-xs text-rose-500">
+              <button onClick={onRemoveTemplate} className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-rose-500">
                 <Trash2 className="h-3 w-3" />
                 移除模板
               </button>
@@ -294,7 +294,7 @@ export function ContextPreview(props: ContextPreviewProps) {
               void loadPickers();
               setShowTplPicker(true);
             }}
-            className="btn-ghost flex items-center gap-1 pb-1 text-xs text-brand-500"
+            className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-brand-500"
           >
             <Plus className="h-3 w-3" />
             添加模板
@@ -305,18 +305,18 @@ export function ContextPreview(props: ContextPreviewProps) {
           {worldbookIds.length === 0 ? (
             <p className="pb-1 text-xs text-ink-300">未添加世界书。</p>
           ) : (
-            <div className="space-y-1 pb-1">
+            <div className="space-y-2 pb-1">
               {worldbookIds.map((id) => {
                 const disabled = disabledWbIds.includes(id);
                 const hits = injectedHits.filter((hit) => hit.entry.worldbook_id === id);
                 return (
-                  <div key={id} className={`rounded-card p-1.5 ${disabled ? "bg-surface-50 opacity-50" : hits.length ? "bg-sky-light/30" : "bg-surface-50"}`}>
+                  <div key={id} className={`neo-panel-soft p-2 ${disabled ? "opacity-55" : hits.length ? "ring-1 ring-sky-200/60" : ""}`}>
                     <div className="flex items-center gap-2">
                       <button onClick={() => void onToggleWorldbook(id)} className="flex-shrink-0">
                         {disabled ? <ToggleLeft className="h-4 w-4 text-ink-300" /> : <ToggleRight className="h-4 w-4 text-sky-500" />}
                       </button>
                       <span className="flex-1 truncate text-xs text-ink-600">{wbNames.get(id) || id.slice(0, 8)}</span>
-                      {hits.length > 0 && <span className="text-xs text-sky-500">命中</span>}
+                      {hits.length > 0 && <span className="neo-pill bg-sky-50/80 text-[10px] text-sky-600">命中</span>}
                       <button onClick={() => void onRemoveWorldbook(id)} className="p-0.5 text-ink-300 hover:text-rose-500">
                         <X className="h-3 w-3" />
                       </button>
@@ -338,7 +338,7 @@ export function ContextPreview(props: ContextPreviewProps) {
               setSelectedWbIds(new Set());
               setShowWbPicker(true);
             }}
-            className="btn-ghost flex items-center gap-1 pb-1 text-xs text-brand-500"
+            className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-brand-500"
           >
             <Plus className="h-3 w-3" />
             添加世界书
@@ -349,20 +349,20 @@ export function ContextPreview(props: ContextPreviewProps) {
           {memoryIds.length === 0 ? (
             <p className="pb-1 text-xs text-ink-300">未添加记忆。</p>
           ) : (
-            <div className="space-y-1 pb-1">
+            <div className="space-y-2 pb-1">
               {memoryIds.map((id) => {
                 const info = memInfos.get(id);
                 const disabled = disabledMemIds.includes(id);
                 const injected = injectedMemoryIds.has(id);
                 const reason = disabled ? "未启用" : injected ? "已注入本轮上下文" : "未注入，可能超出 token 预算";
                 return (
-                  <div key={id} className={`rounded-card p-1.5 ${disabled ? "bg-surface-50 opacity-60" : injected ? "bg-amber-light/30" : "bg-surface-50"}`}>
+                  <div key={id} className={`neo-panel-soft p-2 ${disabled ? "opacity-60" : injected ? "ring-1 ring-amber-200/60" : ""}`}>
                     <div className="flex items-center gap-2">
                       <button onClick={() => void onToggleMemory(id)} className="flex-shrink-0">
                         {disabled ? <ToggleLeft className="h-4 w-4 text-ink-300" /> : <ToggleRight className="h-4 w-4 text-amber-500" />}
                       </button>
                       <span className="flex-1 truncate text-xs text-ink-600">{info?.title || id.slice(0, 8)}</span>
-                      <span className={`text-[11px] ${disabled ? "text-ink-300" : injected ? "text-amber-600" : "text-ink-400"}`}>
+                      <span className={`neo-pill text-[10px] ${disabled ? "bg-slate-100/80 text-ink-300" : injected ? "bg-amber-50/90 text-amber-700" : "bg-white/80 text-ink-400"}`}>
                         {disabled ? "未启用" : injected ? "已注入" : "未注入"}
                       </span>
                       <button onClick={() => void onRemoveMemory(id)} className="p-0.5 text-ink-300 hover:text-rose-500">
@@ -382,7 +382,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                 setSelectedMemIds(new Set());
                 setShowMemPicker(true);
               }}
-              className="btn-ghost flex items-center gap-1 text-xs text-brand-500"
+              className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-brand-500"
             >
               <Plus className="h-3 w-3" />
               添加记忆
@@ -392,34 +392,34 @@ export function ContextPreview(props: ContextPreviewProps) {
                 void onGenerateMemorySuggestions();
               }}
               disabled={!apiConfigured || !!isGeneratingMemorySuggestions}
-              className="btn-ghost flex items-center gap-1 text-xs text-amber-600 disabled:opacity-50"
+              className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-amber-600 disabled:opacity-50"
             >
               <RefreshCw className={`h-3 w-3 ${isGeneratingMemorySuggestions ? "animate-spin" : ""}`} />
               {isGeneratingMemorySuggestions ? "提炼中..." : "AI 提炼记忆"}
             </button>
           </div>
-          <div className="space-y-1 pb-1">
+          <div className="space-y-2 pb-1">
             {suggestedMemories.length === 0 ? (
               <p className="text-xs text-ink-300">暂无待确认记忆。候选记忆不会自动注入，确认后才会启用。</p>
             ) : (
               suggestedMemories.map((memory) => (
-                <div key={memory.id} className="rounded-card border border-amber-200 bg-amber-light/20 p-2">
+                <div key={memory.id} className="neo-panel-soft border-amber-200/60 bg-amber-light/20 p-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-medium text-ink-600">{memory.title || "未命名候选记忆"}</p>
                       <p className="mt-0.5 line-clamp-2 text-[11px] text-ink-400">{memory.content}</p>
                     </div>
-                    <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-amber-700">suggested</span>
+                    <span className="neo-pill bg-white/85 px-1.5 py-0.5 text-[10px] text-amber-700">suggested</span>
                   </div>
                   <p className="mt-1 text-[11px] text-ink-400">待确认记忆不会注入最终 System Prompt。</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "active")} className="btn-primary px-2 py-1 text-[11px]">
+                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "active")} className="neo-button-primary rounded-[14px] px-2.5 py-1.5 text-[11px]">
                       接受并启用
                     </button>
-                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "disabled")} className="btn-ghost text-[11px] text-ink-500">
+                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "disabled")} className="neo-button rounded-[14px] px-2.5 py-1.5 text-[11px] text-ink-500">
                       忽略
                     </button>
-                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "deleted")} className="btn-ghost text-[11px] text-rose-500">
+                    <button onClick={() => void onUpdateSuggestedMemoryStatus(memory.id, "deleted")} className="neo-button rounded-[14px] px-2.5 py-1.5 text-[11px] text-rose-500">
                       删除
                     </button>
                   </div>
@@ -458,7 +458,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     }
                   }}
                   disabled={generatingSummary}
-                  className="btn-ghost flex items-center gap-1 text-xs text-brand-500"
+                  className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-brand-500"
                 >
                   <RefreshCw className={`h-3 w-3 ${generatingSummary ? "animate-spin" : ""}`} />
                   {generatingSummary ? "生成中..." : "AI 生成摘要"}
@@ -480,7 +480,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     setGeneratedPreview(false);
                     setShowSummaryEditor(false);
                   }}
-                  className="btn-ghost text-xs text-amber-600"
+                  className="neo-button rounded-[16px] px-2.5 py-1.5 text-xs text-amber-600"
                 >
                   关闭摘要
                 </button>
@@ -491,7 +491,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     setGeneratedPreview(false);
                     setShowSummaryEditor(false);
                   }}
-                  className="btn-ghost text-xs text-rose-500"
+                  className="neo-button rounded-[16px] px-2.5 py-1.5 text-xs text-rose-500"
                 >
                   清空摘要
                 </button>
@@ -515,7 +515,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                   setGeneratedPreview(false);
                   setShowSummaryEditor(true);
                 }}
-                className="btn-ghost flex items-center gap-1 text-xs text-brand-500"
+                className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1.5 text-xs text-brand-500"
               >
                 <Plus className="h-3 w-3" />
                 AI 生成摘要
@@ -524,6 +524,9 @@ export function ContextPreview(props: ContextPreviewProps) {
           )}
         </ContextSectionCard>
 
+        <div className="px-1 pt-1">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-300">高级信息</p>
+        </div>
         <ContextSectionCard title="Debug" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${injectedHits.length} 命中` : "预览"} level={3} variant="debug">
           <div className="space-y-2 pb-1 text-xs text-ink-400">
             {contextRunSaveStatus !== null && (
@@ -557,12 +560,12 @@ export function ContextPreview(props: ContextPreviewProps) {
 
         <ContextSectionCard title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"} level={3} variant="debug">
           {lastContextOutput ? (
-            <div className="space-y-0.5 pb-1 text-xs text-ink-400">
-              <div className="flex justify-between"><span>角色 + 模板</span><span>{estimateTokens(lastContextOutput.budget.characterPrompt + lastContextOutput.budget.templatePrompt)}</span></div>
-              <div className="flex justify-between"><span>世界书 ({lastContextOutput.budget.worldbookEntries.length})</span><span>{lastContextOutput.budget.worldbookEntries.reduce((sum, entry) => sum + entry.tokens, 0)}</span></div>
-              <div className="flex justify-between"><span>记忆 ({lastContextOutput.budget.memories.length})</span><span>{lastContextOutput.budget.memories.reduce((sum, memory) => sum + memory.tokens, 0)}</span></div>
-              <div className="flex justify-between"><span>摘要</span><span>{estimateTokens(lastContextOutput.budget.summary)}</span></div>
-              <div className="mt-1 flex justify-between border-t border-surface-100 pt-1 font-medium text-ink-500"><span>总计</span><span>{lastContextOutput.estimatedTokens} / {lastContextOutput.budget.budgetLimit}</span></div>
+            <div className="grid gap-2 pb-1 text-xs text-ink-400 sm:grid-cols-2">
+              <div className="stats-chip flex items-center justify-between"><span>角色 + 模板</span><span>{estimateTokens(lastContextOutput.budget.characterPrompt + lastContextOutput.budget.templatePrompt)}</span></div>
+              <div className="stats-chip flex items-center justify-between"><span>世界书 ({lastContextOutput.budget.worldbookEntries.length})</span><span>{lastContextOutput.budget.worldbookEntries.reduce((sum, entry) => sum + entry.tokens, 0)}</span></div>
+              <div className="stats-chip flex items-center justify-between"><span>记忆 ({lastContextOutput.budget.memories.length})</span><span>{lastContextOutput.budget.memories.reduce((sum, memory) => sum + memory.tokens, 0)}</span></div>
+              <div className="stats-chip flex items-center justify-between"><span>摘要</span><span>{estimateTokens(lastContextOutput.budget.summary)}</span></div>
+              <div className="stats-chip flex items-center justify-between font-medium text-ink-500 sm:col-span-2"><span>总计</span><span>{lastContextOutput.estimatedTokens} / {lastContextOutput.budget.budgetLimit}</span></div>
             </div>
           ) : (
             <p className="pb-1 text-xs text-ink-300">{contextPreviewError ? "上下文预览失败，可继续聊天" : "上下文预览构建中。"}</p>
@@ -573,7 +576,7 @@ export function ContextPreview(props: ContextPreviewProps) {
           <p className="mb-2 text-xs text-ink-400">
             {messageCount === 0 ? "预览构建结果，下一条消息将使用这份 system prompt。" : "最近一次上下文构建结果。"}
           </p>
-          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-950/90 p-3 text-xs leading-relaxed text-slate-300 shadow-inner">
+          <pre className="neo-code scrollbar-none max-h-56 overflow-y-auto whitespace-pre-wrap p-3 text-xs leading-relaxed text-slate-600">
             {contextPreviewError && !finalPrompt ? "上下文预览失败，可继续聊天" : finalPrompt || "上下文加载中..."}
           </pre>
         </ContextSectionCard>
@@ -591,7 +594,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                   void onAddTemplate(template.id);
                   setShowTplPicker(false);
                 }}
-                className="mb-1.5 w-full rounded-card border border-surface-100 px-3 py-2 text-left transition-colors hover:border-brand-200"
+                className="neo-button mb-2 w-full px-3 py-2 text-left"
               >
                 <p className="truncate text-sm font-medium text-ink-700">{template.title}</p>
                 <p className="mt-0.5 line-clamp-1 text-xs text-ink-300">{template.content.slice(0, 60)}</p>
@@ -617,7 +620,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     else next.add(worldbook.id);
                     setSelectedWbIds(next);
                   }}
-                  className={`mb-1.5 w-full rounded-card border px-3 py-2 text-left transition-colors ${selected ? "border-brand-300 bg-brand-50" : "border-surface-100 hover:border-brand-200"}`}
+                  className={`mb-2 w-full px-3 py-2 text-left ${selected ? "neo-button-pressed" : "neo-button"}`}
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-ink-700">{worldbook.name}</p>
@@ -657,7 +660,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     else next.add(memory.id);
                     setSelectedMemIds(next);
                   }}
-                  className={`mb-1.5 w-full rounded-card border px-3 py-2 text-left transition-colors ${selected ? "border-brand-300 bg-brand-50" : "border-surface-100 hover:border-brand-200"}`}
+                  className={`mb-2 w-full px-3 py-2 text-left ${selected ? "neo-button-pressed" : "neo-button"}`}
                 >
                   <div className="flex items-center justify-between">
                     <p className="truncate text-sm font-medium text-ink-700">{memory.title || "未命名记忆"}</p>

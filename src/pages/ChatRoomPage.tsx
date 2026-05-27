@@ -83,7 +83,7 @@ function MemorySuggestionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-5 shadow-modal">
+      <div className="neo-panel relative mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col p-5">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold">{title}</h3>
@@ -93,9 +93,9 @@ function MemorySuggestionModal({
             <X className="h-4 w-4 text-ink-400" />
           </button>
         </div>
-        <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <div className="scrollbar-none flex-1 space-y-3 overflow-y-auto pr-1">
           {drafts.map((draft, index) => (
-            <div key={`${draft.title}-${index}`} className="rounded-card border border-surface-100 bg-surface-50 p-3">
+            <div key={`${draft.title}-${index}`} className="neo-panel-soft p-3">
               <div className="mb-2 grid gap-2 sm:grid-cols-[1fr_140px_90px]">
                 <input
                   type="text"
@@ -658,8 +658,8 @@ export function ChatRoomPage() {
   }
 
   return (
-    <div className="flex h-full bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3 gap-3">
-      <div className={`flex-shrink-0 overflow-y-auto scrollbar-none neo-surface transition-all duration-200 ${sessionsCollapsed ? "w-16" : "w-60"}`}
+    <div className="flex h-full gap-3 bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3">
+      <div className={`scrollbar-none flex-shrink-0 overflow-y-auto neo-surface transition-all duration-200 ${sessionsCollapsed ? "w-16" : "w-64"}`}
         style={{ borderRadius: '24px' }}
       >
         {sessionsCollapsed ? (
@@ -714,8 +714,8 @@ export function ChatRoomPage() {
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-center">
-        <div className="mx-auto flex h-full w-full max-w-[960px] flex-col rounded-2xl border border-white/70 bg-white/55 backdrop-blur-sm">
-          <div className="flex items-center gap-3 border-b border-surface-100/60 bg-white/80 px-4 py-2.5 rounded-t-2xl">
+        <div className="neo-page-shell mx-auto flex h-full w-full max-w-[1120px] flex-col overflow-hidden rounded-[34px]">
+          <div className="flex items-center gap-3 border-b border-white/50 bg-white/64 px-5 py-3">
           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-brand-50 text-sm text-brand-500">
             {chat.activeCharacter?.avatar_emoji || <Drama className="h-4 w-4" />}
           </div>
@@ -734,7 +734,7 @@ export function ChatRoomPage() {
           </div>
         </div>
 
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
+        <div ref={messagesContainerRef} className="scrollbar-none flex-1 overflow-y-auto px-5 py-5">
           <div className="mx-auto max-w-4xl">
             {messageList}
           </div>
@@ -788,7 +788,7 @@ export function ChatRoomPage() {
           </div>
         )}
 
-        <div className="border-t border-surface-100/60 bg-white/80 px-4 py-3 rounded-b-2xl">
+        <div className="border-t border-white/50 bg-white/68 px-5 py-4">
           <div className="mx-auto max-w-4xl">
             <ChatInput
               value={inputValue}
@@ -804,7 +804,7 @@ export function ChatRoomPage() {
       </div>
     </div>
 
-      <div className={`flex-shrink-0 overflow-y-auto scrollbar-none neo-surface transition-all duration-200 ${contextCollapsed ? "w-12" : "w-72"}`}
+      <div className={`scrollbar-none flex-shrink-0 overflow-y-auto neo-surface transition-all duration-200 ${contextCollapsed ? "w-12" : "w-80"}`}
         style={{ borderRadius: '24px' }}
       >
         {contextCollapsed ? (
@@ -841,7 +841,7 @@ export function ChatRoomPage() {
       {showPicker && (
         <div className="fixed inset-0 z-40 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/20" onClick={() => setShowPicker(false)} />
-          <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-5 shadow-modal">
+      <div className="neo-panel relative mx-4 w-full max-w-sm p-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold">新建会话</h3>
               <button onClick={() => setShowPicker(false)} className="rounded-full p-1 hover:bg-surface-100">
@@ -853,7 +853,7 @@ export function ChatRoomPage() {
                 setShowPicker(false);
                 void chat.createSession();
               }}
-              className="mb-2 w-full rounded-card border border-surface-100 px-3 py-2.5 text-left text-sm text-ink-500 transition-colors hover:border-brand-200"
+              className="neo-button mb-2 w-full px-3 py-2.5 text-left text-sm text-ink-500"
             >
               <UserCircle className="mr-2 inline h-4 w-4" />
               不绑定角色，开始空白会话

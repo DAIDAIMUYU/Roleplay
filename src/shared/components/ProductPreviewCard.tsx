@@ -78,7 +78,7 @@ export function ProductPreviewCard() {
   const step = STEPS[currentStep];
 
   return (
-    <div className="rounded-2xl border border-white/60 bg-gradient-to-br from-brand-50/40 via-white to-sky-light/20 p-6 shadow-sm backdrop-blur-md overflow-hidden">
+    <div className="neo-panel overflow-hidden bg-gradient-to-br from-brand-50/40 via-white to-sky-light/20 p-6">
       <div className="mb-3 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-brand-400" />
         <span className="text-xs font-semibold uppercase tracking-wide text-brand-500">产品预览</span>
@@ -102,7 +102,7 @@ export function ProductPreviewCard() {
           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs text-brand-600">
             <UserCircle className="h-4 w-4" />
           </div>
-          <div className="rounded-2xl rounded-tl-md bg-surface-100 px-3 py-2 text-xs text-ink-600 max-w-[75%]">
+          <div className="neo-panel-soft max-w-[75%] rounded-2xl rounded-tl-md px-3 py-2 text-xs text-ink-600">
             你好，我是艾琳，王都的冒险者。有什么我可以帮你的？
           </div>
         </div>
@@ -121,11 +121,11 @@ export function ProductPreviewCard() {
               </div>
             )}
             <div
-              className={`rounded-2xl px-3 py-2 text-xs max-w-[75%] ${
-                msg.role === "user"
-                  ? "rounded-tr-md bg-brand-500 text-white"
-                  : "rounded-tl-md bg-surface-100 text-ink-600"
-              }`}
+                className={`max-w-[75%] rounded-2xl px-3 py-2 text-xs ${
+                  msg.role === "user"
+                    ? "rounded-tr-md bg-brand-500 text-white shadow-lg shadow-brand-200/30"
+                    : "neo-panel-soft rounded-tl-md text-ink-600"
+                }`}
             >
               {msg.content}
               {msg.role === "assistant" && index === step.messages.length - 1 && index < visibleMessages && (
@@ -143,7 +143,7 @@ export function ProductPreviewCard() {
           return (
             <div
               key={`${currentStep}-hint-${index}`}
-              className={`flex items-center gap-1.5 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] text-ink-400 shadow-sm transition-all duration-300 ${
+              className={`neo-button flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-ink-400 transition-all duration-300 ${
                 index < visibleHints ? "opacity-100 scale-100" : "opacity-0 scale-95"
               }`}
             >

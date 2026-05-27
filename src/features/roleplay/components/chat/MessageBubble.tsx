@@ -100,10 +100,10 @@ export function MessageBubble({
   return (
     <div className={`group mb-4 flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`relative max-w-[80%] rounded-2xl px-4 py-2.5 ${
+        className={`relative max-w-[82%] px-4 py-3 ${
           isUser
-            ? "rounded-br-md bg-brand-500 text-white"
-            : "rounded-bl-md border border-surface-100 bg-white shadow-sm"
+            ? "rounded-[24px] rounded-br-lg bg-gradient-to-br from-brand-500 to-sky-500 text-white shadow-[0_16px_36px_rgba(96,165,250,0.24)]"
+            : "neo-panel-soft rounded-[24px] rounded-bl-lg"
         }`}
       >
         <p className={`mb-0.5 text-xs ${isUser ? "text-brand-100" : "text-ink-300"}`}>
@@ -129,7 +129,7 @@ export function MessageBubble({
           <>
             {/* Desktop: hover-based action bar */}
             <div
-              className={`hidden md:flex mt-1.5 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ${
+              className={`mt-2 hidden items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 md:flex ${
                 isUser ? "justify-end" : "justify-start"
               }`}
             >
@@ -167,7 +167,7 @@ export function MessageBubble({
             </div>
 
             {/* Mobile: version arrows + "⋯" menu button */}
-            <div className={`flex md:hidden mt-1.5 items-center gap-1 ${isUser ? "justify-end" : "justify-start"}`}>
+            <div className={`mt-2 flex items-center gap-1 md:hidden ${isUser ? "justify-end" : "justify-start"}`}>
               {hasVersions && (
                 <div className={`mr-1 flex items-center gap-0.5 ${isUser ? "text-white/70" : "text-ink-400"}`}>
                   <VersionButton
@@ -204,7 +204,7 @@ export function MessageBubble({
             {mobileMenuOpen && (
               <div
                 ref={menuRef}
-                className={`absolute z-40 mt-1 w-44 rounded-xl border border-surface-200 bg-white py-1.5 shadow-elevated md:hidden ${
+                className={`absolute z-40 mt-1 w-44 rounded-2xl border border-white/70 bg-white/88 py-1.5 shadow-elevated backdrop-blur-md md:hidden ${
                   isUser ? "right-0" : "left-0"
                 }`}
                 style={{ top: "100%" }}

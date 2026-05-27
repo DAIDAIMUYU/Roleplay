@@ -1,5 +1,5 @@
+import { useEffect, useRef } from "react";
 import { Send, Square } from "lucide-react";
-import { useRef, useEffect } from "react";
 
 interface ChatInputProps {
   value: string;
@@ -22,13 +22,11 @@ export function ChatInput({
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
   useEffect(() => {
     const el = inputRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 160) + "px";
-    }
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [value]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -41,7 +39,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex items-end gap-2 p-3 bg-white border-t border-surface-100">
+    <div className="flex items-end gap-3 rounded-[28px] border border-white/60 bg-white/58 p-3 backdrop-blur-md">
       <textarea
         ref={inputRef}
         value={value}
@@ -50,23 +48,19 @@ export function ChatInput({
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className="flex-1 resize-none rounded-xl border border-surface-200 bg-surface-50 py-2.5 px-4 text-sm text-ink-900 placeholder:text-ink-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 focus:outline-none disabled:opacity-50 max-h-40"
+        className="neo-input flex-1 max-h-40 resize-none rounded-[20px] border-0 px-4 py-3 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none disabled:opacity-50"
       />
 
       {isStreaming ? (
-        <button
-          onClick={onStop}
-          className="flex-shrink-0 h-10 w-10 rounded-full bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600 transition-colors"
-          title="停止生成"
-        >
+        <button onClick={onStop} className="neo-button flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-rose-500" title="停止生成">
           <Square className="h-4 w-4" />
         </button>
       ) : (
         <button
           onClick={onSend}
           disabled={disabled || !value.trim()}
-          className="flex-shrink-0 h-10 w-10 rounded-full bg-brand-500 text-white flex items-center justify-center hover:bg-brand-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title="发送 (Enter)"
+          className="neo-button-primary flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-40"
+          title="发送（Enter）"
         >
           <Send className="h-4 w-4" />
         </button>

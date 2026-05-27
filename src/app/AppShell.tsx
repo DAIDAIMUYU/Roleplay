@@ -8,8 +8,8 @@ export function AppShell() {
 
   if (isMobile) {
     return (
-      <div className="flex flex-col min-h-dvh pb-safe-bottom">
-        <main className="flex-1 overflow-y-auto">
+      <div className="flex min-h-dvh flex-col overflow-x-hidden pb-safe-bottom">
+        <main className="app-scrollbar-clean flex-1 overflow-y-auto">
           <Outlet />
         </main>
         <MobileBottomNav />
@@ -18,9 +18,9 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3 gap-3">
+    <div className="flex h-dvh gap-3 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-blue-50 p-3">
       <DesktopSidebar />
-      <main className="flex-1 overflow-y-auto">
+      <main className="app-scrollbar-clean glass-page-shell min-w-0 flex-1 overflow-y-auto rounded-[44px] border border-white/70 bg-white/36">
         <Outlet />
       </main>
     </div>
