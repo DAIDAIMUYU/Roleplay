@@ -186,6 +186,10 @@ export function HelpCenterPage() {
           </p>
         </div>
 
+        <div className="neo-panel-soft mb-6 rounded-[24px] px-4 py-3 text-sm text-ink-500">
+          提示：`local_device` 只保存在当前设备，`hosted_encrypted` 登录后可跨设备加载。已保存的 API 配置现在支持编辑；编辑时 API Key 留空表示保持旧 Key 不变。
+        </div>
+
         {/* ── Quick entry buttons ── */}
         <div className="mb-8 flex flex-wrap items-center gap-2">
           <QuickEntry to="/settings" icon={<KeyRound className="h-4 w-4" />} label="去配置 API" />

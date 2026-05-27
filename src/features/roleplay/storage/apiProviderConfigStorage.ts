@@ -45,6 +45,15 @@ export interface ApiConfigSaveInput {
   credentialId?: string | null;
 }
 
+export interface HostedConfigSyncInput {
+  credentialId: string;
+  label?: string | null;
+  provider: ProviderType;
+  model: string;
+  baseURL: string;
+  isDefault?: boolean;
+}
+
 function loadConfigs(): ApiConfigEntry[] {
   try {
     const raw = localStorage.getItem(CONFIG_LIST_KEY);
@@ -118,7 +127,7 @@ export function saveConfig(input: ApiConfigSaveInput): ApiConfigEntry {
 
 export function updateConfig(
   id: string,
-  input: Partial<Pick<ApiConfigEntry, "label" | "model" | "baseURL" | "storageMode" | "credentialId">>,
+  input: Partial<Pick<ApiConfigEntry, "label" | "provider" | "model" | "baseURL" | "storageMode" | "credentialId">>,
 ): ApiConfigEntry | null {
   const configs = loadConfigs();
   const idx = configs.findIndex((c) => c.id === id);
@@ -127,6 +136,67 @@ export function updateConfig(
   configs[idx] = { ...configs[idx], ...input, updatedAt: new Date().toISOString() };
   saveConfigs(configs);
   return configs[idx];
+}
+
+export function findConfigByCredentialId(credentialId: string): ApiConfigEntry | null {
+  return loadConfigs().find((config) => config.storageMode === "hosted_encrypted" && config.credentialId === credentialId) ?? null;
+}
+
+export function syncHostedConfig(input: HostedConfigSyncInput): ApiConfigEntry {
+  const configs = loadConfigs();
+  const now = new Date().toISOString();
+  const hasEnabledConfig = configs.some((config) => config.enabled);
+  const existingIndex = configs.findIndex(
+    (config) => config.storageMode === "hosted_encrypted" && config.credentialId === input.credentialId,
+  );
+
+  if (existingIndex >= 0) {
+    const updated: ApiConfigEntry = {
+      ...configs[existingIndex],
+      label: input.label?.trim() || getPresetName(input.provider),
+      provider: input.provider,
+      model: input.model,
+      baseURL: input.baseURL,
+      storageMode: "hosted_encrypted",
+      credentialId: input.credentialId,
+      enabled: configs[existingIndex].enabled || (!hasEnabledConfig && !!input.isDefault),
+      updatedAt: now,
+    };
+    configs[existingIndex] = updated;
+
+    if (updated.enabled) {
+      localStorage.setItem(ENABLED_CONFIG_KEY, updated.id);
+    }
+
+    saveConfigs(configs);
+    return updated;
+  }
+
+  const created: ApiConfigEntry = {
+    id: crypto.randomUUID(),
+    label: input.label?.trim() || getPresetName(input.provider),
+    provider: input.provider,
+    model: input.model,
+    baseURL: input.baseURL,
+    storageMode: "hosted_encrypted",
+    credentialId: input.credentialId,
+    enabled: !hasEnabledConfig && !!input.isDefault,
+    testStatus: "untested",
+    lastTestedAt: null,
+    lastTestedLatencyMs: null,
+    lastTestError: null,
+    lastUsedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (created.enabled) {
+    localStorage.setItem(ENABLED_CONFIG_KEY, created.id);
+  }
+
+  configs.push(created);
+  saveConfigs(configs);
+  return created;
 }
 
 export function setTestResult(

@@ -9,6 +9,20 @@ if (!globalThis.crypto) {
 }
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("react") || id.includes("scheduler")) return "react-vendor";
+          if (id.includes("react-router")) return "router-vendor";
+          if (id.includes("@supabase")) return "supabase-vendor";
+          if (id.includes("lucide-react")) return "icons-vendor";
+          if (id.includes("dexie")) return "storage-vendor";
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -49,7 +63,7 @@ export default defineConfig({
         // Keep Workbox bundling compatible with the current Node 18 build environment.
         // This only affects service worker minification, not app runtime behavior.
         mode: "development",
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        globPatterns: ["**/*.{html,css,svg,png,woff2}", "assets/*.js"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//],
         runtimeCaching: [

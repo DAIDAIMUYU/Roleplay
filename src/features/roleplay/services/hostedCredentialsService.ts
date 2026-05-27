@@ -24,11 +24,12 @@ export interface HostedCredentialSelection {
 }
 
 export interface HostedCredentialSaveInput {
+  credential_id?: string;
   label: string;
   provider_type: Exclude<ProviderType, "mock">;
   base_url: string;
   default_model: string;
-  api_key: string;
+  api_key?: string;
   set_default?: boolean;
 }
 

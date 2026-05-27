@@ -50,7 +50,7 @@ export function AppModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 md:px-8 md:py-10">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-3 py-4 md:px-8 md:py-10">
       {/* Overlay */}
       <div 
         className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(191,219,254,0.22),_rgba(255,255,255,0.08)_52%,_rgba(255,255,255,0.02)_100%)] backdrop-blur-sm fade-in"
@@ -59,8 +59,11 @@ export function AppModal({
       
       {/* Modal */}
       <div
-        className={`neo-panel relative my-auto flex max-h-[80vh] w-full flex-col self-center overflow-hidden rounded-[36px] border border-white/80 bg-white/74 shadow-[0_30px_90px_rgba(96,165,250,0.20)] backdrop-blur-xl modal-enter ${sizeClasses[size]} ${bodyClassName}`}
-        style={size === "wide" ? { width: "min(860px, calc(100vw - 88px))" } : undefined}
+        className={`neo-panel relative my-auto flex w-full flex-col self-center overflow-hidden rounded-[36px] border border-white/80 bg-white/74 shadow-[0_30px_90px_rgba(96,165,250,0.20)] backdrop-blur-xl modal-enter ${sizeClasses[size]} ${bodyClassName}`}
+        style={{
+          maxHeight: "calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
+          width: size === "wide" ? "min(900px, calc(100vw - 24px))" : undefined,
+        }}
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/22 via-white/10 to-sky-100/18" />
         {/* Header */}
@@ -80,13 +83,13 @@ export function AppModal({
         </div>
         
         {/* Content */}
-        <div className={`scrollbar-none relative flex-1 overflow-y-auto px-6 py-5 ${contentClassName}`}>
+        <div className={`scrollbar-none mobile-modal-safe-content relative flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 ${contentClassName}`}>
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="relative sticky bottom-0 flex-shrink-0 rounded-b-[36px] border-t border-white/45 bg-white/78 px-6 py-4 backdrop-blur-sm">
+          <div className="mobile-modal-safe-footer relative sticky bottom-0 flex-shrink-0 rounded-b-[36px] border-t border-white/45 bg-white/78 px-4 py-3 md:px-6 md:py-4 backdrop-blur-sm">
             {footer}
           </div>
         )}

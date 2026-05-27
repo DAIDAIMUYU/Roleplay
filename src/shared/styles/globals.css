@@ -39,6 +39,16 @@
   #root::-webkit-scrollbar {
     display: none;
   }
+
+  @media (max-width: 768px) {
+    input,
+    textarea,
+    select,
+    .rounded-input,
+    .neo-input {
+      font-size: 16px !important;
+    }
+  }
 }
 
 @layer components {
@@ -120,6 +130,14 @@
 
   .mobile-bottom-nav-floating-offset {
     bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-modal-safe-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-modal-safe-content {
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   }
 
   .section-divider {

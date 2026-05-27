@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, Drama, KeyRound, MessageCircle, Palette, Plus, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth";
@@ -17,6 +17,7 @@ import {
 } from "../features/roleplay/services/hostedCredentialsService";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import { SidebarCollapseButton } from "../shared/components/SidebarCollapseButton";
+import { AppModal } from "../shared/components/AppModal";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
 import { usePersistentCollapsedState } from "../shared/hooks/usePersistentCollapsedState";
 import * as Repo from "../features/roleplay/repositories/roleplayRepository";
@@ -87,7 +88,7 @@ function MemorySuggestionModal({
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold">{title}</h3>
-            <p className="mt-0.5 text-xs text-ink-300">先预览和编辑，再决定保存并启用，或放入记忆收件箱。</p>
+            <p className="mt-0.5 text-xs text-ink-300">先预览并编辑候选记忆，再决定保存并启用，或放入记忆收件箱。</p>
           </div>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-surface-100">
             <X className="h-4 w-4 text-ink-400" />
@@ -214,7 +215,7 @@ export function ChatRoomPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerChars, setPickerChars] = useState<CharacterRow[]>([]);
   const [memoryDrafts, setMemoryDrafts] = useState<MemorySuggestionDraft[] | null>(null);
-  const [memoryDraftTitle, setMemoryDraftTitle] = useState("AI 提炼记忆");
+  const [memoryDraftTitle, setMemoryDraftTitle] = useState("AI 鎻愮偧璁板繂");
   const [memorySaveMode, setMemorySaveMode] = useState<"active" | "suggested" | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -380,7 +381,7 @@ export function ChatRoomPage() {
             {chat.isLoadingOlderMessages ? "加载中..." : "加载更早消息"}
           </button>
         ) : (
-          <span className="text-xs text-ink-300">已加载到最早消息</span>
+          <span className="text-xs text-ink-300">已经加载到最早消息</span>
         )}
       </div>
     );
@@ -421,10 +422,10 @@ export function ChatRoomPage() {
               <h3 className="text-lg font-semibold text-ink-700">开始聊天</h3>
               <p className="mt-1.5 max-w-xs text-sm text-ink-300">
                 {chat.isDemo
-                  ? "本地模式 · 使用本地预览回复"
+                  ? "本地模式，可直接使用本地预览回复。"
                   : chat.apiConfigured
-                  ? "输入消息开始角色扮演"
-                  : "请先在设置中心启用 API 配置"}
+                  ? "输入消息后就可以开始角色扮演。"
+                  : "请先在设置中心启用 API 配置。"}
               </p>
             </>
           ) : (
@@ -432,8 +433,8 @@ export function ChatRoomPage() {
               <h3 className="text-lg font-semibold text-ink-700">开始你的第一段对话</h3>
               <p className="mt-1.5 max-w-xs text-sm text-ink-300">
                 {!chat.apiConfigured 
-                  ? "连接 API 后才能使用真实模型回复，或继续使用本地预览模式"
-                  : "先创建一个会话，选择角色后即可开始聊天"}
+                  ? "连接 API 后才能使用真实模型回复，或者继续使用本地预览模式。"
+                  : "先创建一个会话，选择角色后即可开始聊天。"}
               </p>
               <div className="mt-5 flex flex-col gap-3 max-w-xs w-full">
                 {/* API configuration prompt - show first if not configured */}
@@ -494,18 +495,18 @@ export function ChatRoomPage() {
         <div className="flex items-center gap-2 border-b border-surface-100 bg-white px-3 py-2.5">
           <button onClick={() => setShowMobileSessions((value) => !value)} className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100">
             <Drama className="h-4 w-4" />
-            <span>会话</span>
+            <span>浼氳瘽</span>
             <ChevronDown className="h-3 w-3" />
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-ink-900">
               {chat.activeSessionId
-                ? chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天室"
-                : "聊天室"}
+                ? chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天房间"
+                : "聊天房间"}
             </p>
           </div>
           {providerConfig.storageMode === "hosted_encrypted" && (
-            <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管·流式</span>
+            <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管模式</span>
           )}
           <ModeBadge />
         </div>
@@ -571,8 +572,8 @@ export function ChatRoomPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <h3 className="text-base font-semibold text-ink-900">上下文控制台</h3>
-                  <p className="text-xs text-ink-400">角色、世界书、记忆与预算</p>
+                  <h3 className="text-base font-semibold text-ink-900">涓婁笅鏂囨帶鍒跺彴</h3>
+                  <p className="text-xs text-ink-400">角色、世界书、记忆与费用预览</p>
                 </div>
                 <button 
                   onClick={() => setShowMobileContext(false)} 
@@ -593,6 +594,7 @@ export function ChatRoomPage() {
           {messageList}
           {userScrolledUp && (
             <button onClick={scrollToBottom} className="fixed bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
+              鍥炲埌搴曢儴
               回到底部
             </button>
           )}
@@ -604,7 +606,7 @@ export function ChatRoomPage() {
             <p className="flex-1 truncate text-xs text-rose-700">{chat.error}</p>
             <button onClick={() => void chat.retry()} className="btn-ghost flex items-center gap-1 text-xs text-rose-600">
               <RefreshCw className="h-3 w-3" />
-              重试
+              閲嶈瘯
             </button>
           </div>
         )}
@@ -681,7 +683,7 @@ export function ChatRoomPage() {
             <button
               onClick={handleCreateSession}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-sky-50 text-brand-500 shadow-sm transition-colors hover:from-brand-100 hover:to-sky-100"
-              title="新建会话"
+              title="鏂板缓浼氳瘽"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -710,7 +712,7 @@ export function ChatRoomPage() {
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-sky-100/60 px-3 py-2.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-sky-500">会话列表</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-500">浼氳瘽鍒楄〃</span>
               <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} side="left" />
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -734,16 +736,16 @@ export function ChatRoomPage() {
             {chat.activeCharacter?.avatar_emoji || <Drama className="h-4 w-4" />}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold text-ink-900">{chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天室"}</h1>
+            <h1 className="truncate text-sm font-semibold text-ink-900">{chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天房间"}</h1>
             {chat.activeCharacter && <p className="truncate text-xs text-brand-500">{chat.activeCharacter.name}</p>}
           </div>
           <div className="flex items-center gap-2">
             {providerConfig.storageMode === "hosted_encrypted" && (
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-700">托管模式 · 流式</span>
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-700">托管模式</span>
             )}
-            {chat.saveStatus === "saving" && <span className="text-xs text-ink-300">保存中...</span>}
+            {chat.saveStatus === "saving" && <span className="text-xs text-ink-300">淇濆瓨涓?..</span>}
             {chat.saveStatus === "saved" && <span className="text-xs text-emerald-500">已保存</span>}
-            {chat.saveStatus === "error" && <span className="text-xs text-rose-500">保存失败</span>}
+            {chat.saveStatus === "error" && <span className="text-xs text-rose-500">淇濆瓨澶辫触</span>}
             <ModeBadge />
           </div>
         </div>
@@ -811,7 +813,7 @@ export function ChatRoomPage() {
               onStop={chat.stopGeneration}
               isStreaming={chat.isStreaming}
               disabled={!hasActiveSession || (!chat.isDemo && !chat.apiConfigured)}
-              placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息... (Enter 发送，Shift+Enter 换行)"}
+              placeholder={!hasActiveSession ? "请先创建会话" : !chat.isDemo && !chat.apiConfigured ? "请先在设置中心启用 API 配置..." : "输入消息...（Enter 发送，Shift+Enter 换行）"}
             />
           </div>
         </div>
@@ -828,7 +830,7 @@ export function ChatRoomPage() {
               onToggle={toggleContextCollapsed} 
               side="right"
               floating
-              ariaLabel="展开上下文控制台"
+              ariaLabel="灞曞紑涓婁笅鏂囨帶鍒跺彴"
             />
           </div>
         ) : (
@@ -836,13 +838,13 @@ export function ChatRoomPage() {
             <div className="flex items-center justify-between border-b border-sky-100/60 px-3 py-2.5">
               <div>
                 <span className="text-xs font-semibold text-ink-700">上下文</span>
-                <p className="text-[10px] text-ink-400">角色设定与上下文</p>
+                <p className="text-[10px] text-ink-400">角色设定与上下文控制台</p>
               </div>
               <SidebarCollapseButton 
                 collapsed={contextCollapsed} 
                 onToggle={toggleContextCollapsed} 
                 side="right"
-                ariaLabel="收起上下文控制台"
+                ariaLabel="鏀惰捣涓婁笅鏂囨帶鍒跺彴"
               />
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -852,47 +854,68 @@ export function ChatRoomPage() {
         )}
       </div>
 
-      {showPicker && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/20" onClick={() => setShowPicker(false)} />
-      <div className="neo-panel relative mx-4 w-full max-w-sm p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">新建会话</h3>
-              <button onClick={() => setShowPicker(false)} className="rounded-full p-1 hover:bg-surface-100">
-                <X className="h-4 w-4 text-ink-400" />
-              </button>
-            </div>
-            <button
-              onClick={() => {
-                setShowPicker(false);
-                void chat.createSession();
-              }}
-              className="neo-button mb-2 w-full px-3 py-2.5 text-left text-sm text-ink-500"
-            >
-              <UserCircle className="mr-2 inline h-4 w-4" />
-              不绑定角色，开始空白会话
-            </button>
-            {pickerChars.map((character) => (
+      <AppModal
+        open={showPicker}
+        onClose={() => setShowPicker(false)}
+        title="选择聊天角色"
+        description={
+          pickerChars.length > 0
+            ? "选择一个角色后再创建会话；也可以直接创建空白会话。"
+            : "当前还没有角色，请先去创作工坊创建角色。"
+        }
+        size="sm"
+      >
+        <div className="space-y-3">
+          {pickerChars.length > 0 ? (
+            <>
               <button
-                key={character.id}
                 onClick={() => {
                   setShowPicker(false);
-                  void chat.createSession(character.id);
+                  void chat.createSession();
                 }}
-                className="mb-1.5 flex w-full items-center gap-3 rounded-card border border-surface-100 px-3 py-2.5 text-left transition-colors hover:border-brand-200"
+                className="neo-button w-full px-3 py-3 text-left text-sm text-ink-600"
               >
-                <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-brand-50 text-sm text-brand-500">
-                  {character.avatar_emoji || character.name[0]}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink-700">{character.name}</p>
-                  <p className="truncate text-xs text-ink-300">{String((character.card_json as Record<string, unknown>)?.identity ?? "") || "无身份设定"}</p>
-                </div>
+                <UserCircle className="mr-2 inline h-4 w-4" />
+                不绑定角色，开始空白会话
               </button>
-            ))}
-          </div>
+              <div className="space-y-2">
+                {pickerChars.map((character) => (
+                  <button
+                    key={character.id}
+                    onClick={() => {
+                      setShowPicker(false);
+                      void chat.createSession(character.id);
+                    }}
+                    className="neo-button flex w-full items-center gap-3 rounded-[22px] px-3 py-3 text-left"
+                  >
+                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[16px] bg-brand-50 text-sm text-brand-500">
+                      {character.avatar_emoji || character.name[0]}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-ink-700">{character.name}</p>
+                      <p className="truncate text-xs text-ink-400">
+                        {String((character.card_json as Record<string, unknown>)?.identity ?? "") || "未填写身份设定"}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3 rounded-[24px] border border-amber-100/80 bg-amber-light/20 px-4 py-4">
+              <p className="text-sm text-amber-700">请先创建角色，再开始绑定角色的对话。</p>
+              <Link
+                to="/studio"
+                onClick={() => setShowPicker(false)}
+                className="neo-button-primary inline-flex w-full items-center justify-center gap-2 rounded-[18px] px-4 py-3 text-sm"
+              >
+                <Palette className="h-4 w-4" />
+                去创作工坊创建角色
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </AppModal>
 
       {memoryDrafts && (
         <MemorySuggestionModal
