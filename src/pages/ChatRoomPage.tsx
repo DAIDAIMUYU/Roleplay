@@ -356,6 +356,11 @@ export function ChatRoomPage() {
     onSaveSummaryText: chat.saveSummary,
     onClearSummary: chat.clearSummary,
     onGenerateSummary: chat.generateSummary,
+    onCompressContext: chat.compressContext,
+    compressBusy: chat.compressBusy,
+    compressPreview: chat.compressPreview,
+    contextTokenUsed: chat.lastContextOutput?.estimatedTokens,
+    contextTokenLimit: chat.lastContextOutput?.budget?.budgetLimit,
     onRefreshBalance: chat.refreshProviderBalance,
   };
 

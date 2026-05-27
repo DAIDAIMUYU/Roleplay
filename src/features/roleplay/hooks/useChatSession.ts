@@ -65,6 +65,8 @@ export interface ChatState {
   isLoadingOlderMessages: boolean;
   suggestedMemories: MemoryRow[];
   isGeneratingMemorySuggestions: boolean;
+  compressBusy: boolean;
+  compressPreview: string | null;
   latestProviderUsage: ProviderUsage | null;
   latestCostEstimate: ProviderCostEstimate | null;
   cacheDiag: CacheDiagnostics | null;
@@ -96,6 +98,7 @@ export interface ChatActions {
   saveSummary: (text: string) => Promise<void>;
   clearSummary: () => Promise<void>;
   generateSummary: () => Promise<string | null>;
+  compressContext: () => Promise<string | null>;
   loadMessageRevisions: (messageIndex: number) => Promise<MessageRevisionRow[]>;
   loadOlderMessages: () => Promise<void>;
   generateMemorySuggestions: (source?: { messageIndex?: number }) => Promise<MemorySuggestionDraft[] | null>;
@@ -393,6 +396,8 @@ export function useChatSession(
     isLoadingOlderMessages: false,
     suggestedMemories: [],
     isGeneratingMemorySuggestions: false,
+    compressBusy: false,
+    compressPreview: null,
     latestProviderUsage: null,
     latestCostEstimate: null,
     cacheDiag: null,
@@ -1028,6 +1033,97 @@ export function useChatSession(
       }
       return text.trim();
     } catch {
+      return null;
+    }
+  }, [apiConfigured, buildConfig]);
+
+  const compressContext = useCallback(async (): Promise<string | null> => {
+    const current = stateRef.current;
+    if (!apiConfigured || !current.activeSessionId) return null;
+    const allMessages = current.messages.filter((m) => m.role !== "system");
+    if (allMessages.length < 10) return null;
+
+    // Keep last 20 messages (recent window), compress everything before
+    const RECENT_WINDOW = 20;
+    const oldMessages = allMessages.slice(0, Math.max(0, allMessages.length - RECENT_WINDOW));
+    if (oldMessages.length < 3) return null; // not enough to compress
+
+    setState((s) => ({ ...s, compressBusy: true, compressPreview: null }));
+
+    try {
+      const character = current.activeCharacter;
+      const charName = character?.name ?? "角色";
+      const existingSummary = current.summaryText?.trim() ?? "";
+      const oldText = oldMessages
+        .map((m) => `${m.role === "user" ? "用户" : charName}：${m.content}`)
+        .join("\n");
+
+      const compressPrompt: ChatMessage[] = [
+        {
+          role: "system",
+          content: [
+            "你是角色扮演会话的上下文压缩助手。请将以下较早的对话压缩为结构化摘要 Checkpoint，供后续角色扮演继续使用。",
+            "",
+            "压缩目标：使后续对话能连贯继续，保留剧情、关系、约定、伏笔、情绪走向。",
+            "不要编造未发生的新剧情。不要替用户或角色做未来决定。只基于已有对话。",
+            "",
+            "请按以下固定格式输出中文摘要（不要输出任何其他内容）：",
+            "",
+            "## 会话摘要 Checkpoint",
+            "",
+            "### 已发生剧情",
+            "- ...",
+            "",
+            "### 当前场景",
+            "- ...",
+            "",
+            "### 角色关系状态",
+            "- ...",
+            "",
+            "### 用户与角色的重要约定",
+            "- ...",
+            "",
+            "### 长期设定与事实",
+            "- ...",
+            "",
+            "### 未解决伏笔",
+            "- ...",
+            "",
+            "### 情绪与语气走向",
+            "- ...",
+            "",
+            "### 下一轮对话注意事项",
+            "- ...",
+          ].join("\n"),
+        },
+      ];
+
+      if (existingSummary) {
+        compressPrompt.push({
+          role: "user",
+          content: `当前已有摘要：\n${existingSummary}\n\n请基于以上摘要和以下较早对话，生成更新后的完整摘要 Checkpoint。\n\n较早对话：\n${oldText}`,
+        });
+      } else {
+        compressPrompt.push({
+          role: "user",
+          content: `请将以下较早对话压缩为摘要 Checkpoint：\n\n${oldText}`,
+        });
+      }
+
+      let text = "";
+      for await (const chunk of sendProviderStreamRequest(false, buildConfig(), compressPrompt, undefined)) {
+        text += chunk.content;
+      }
+
+      const trimmed = text.trim();
+      if (trimmed) {
+        setState((s) => ({ ...s, compressPreview: trimmed, compressBusy: false }));
+        return trimmed;
+      }
+      setState((s) => ({ ...s, compressBusy: false }));
+      return null;
+    } catch {
+      setState((s) => ({ ...s, compressBusy: false }));
       return null;
     }
   }, [apiConfigured, buildConfig]);
@@ -1812,6 +1908,7 @@ export function useChatSession(
     saveSummary,
     clearSummary,
     generateSummary,
+    compressContext,
     loadMessageRevisions,
     loadOlderMessages,
     generateMemorySuggestions,

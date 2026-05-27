@@ -71,6 +71,11 @@ interface ContextPreviewProps {
   onSaveSummaryText: (text: string) => Promise<void>;
   onClearSummary: () => Promise<void>;
   onGenerateSummary: () => Promise<string | null>;
+  onCompressContext: () => Promise<string | null>;
+  compressBusy?: boolean;
+  compressPreview?: string | null;
+  contextTokenUsed?: number;
+  contextTokenLimit?: number;
   onRefreshBalance: () => Promise<void>;
 }
 
@@ -145,6 +150,11 @@ export function ContextPreview(props: ContextPreviewProps) {
     onSaveSummaryText,
     onClearSummary,
     onGenerateSummary,
+    onCompressContext,
+    compressBusy,
+    compressPreview,
+    contextTokenUsed,
+    contextTokenLimit,
     onRefreshBalance,
   } = props;
 
@@ -475,6 +485,81 @@ export function ContextPreview(props: ContextPreviewProps) {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        </ContextSectionCard>
+
+        
+        {/* ── Context Window Status ── */}
+        <ContextSectionCard
+          title="上下文窗口"
+          icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />}
+          badge={(() => {
+            if (!contextTokenUsed || !contextTokenLimit) return "预览";
+            const pct = Math.round((contextTokenUsed / contextTokenLimit) * 100);
+            return pct >= 70 ? `接近上限 ${pct}%` : pct >= 50 ? `${pct}%` : `正常 ${pct}%`;
+          })()}
+          level={2}
+        >
+          <div className="space-y-2 pb-1 text-xs text-ink-400">
+            {contextTokenUsed && contextTokenLimit ? (
+              <>
+                <div className="stats-chip flex items-center justify-between">
+                  <span>当前用量</span>
+                  <span>{formatToken(contextTokenUsed)} / {formatToken(contextTokenLimit)} tok ({Math.round((contextTokenUsed / contextTokenLimit) * 100)}%)</span>
+                </div>
+                {/* Usage bar */}
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-200">
+                  <div
+                    className={`h-full rounded-full transition-all ${contextTokenUsed / contextTokenLimit >= 0.7 ? "bg-rose-400" : contextTokenUsed / contextTokenLimit >= 0.5 ? "bg-amber-400" : "bg-emerald-400"}`}
+                    style={{ width: `${Math.min(100, Math.round((contextTokenUsed / contextTokenLimit) * 100))}%` }}
+                  />
+                </div>
+
+                {contextTokenUsed / contextTokenLimit >= 0.7 && (
+                  <p className="text-[11px] text-amber-600">上下文窗口接近上限，请求可能失败。建议压缩较早消息为摘要。</p>
+                )}
+
+                {/* Compress button */}
+                <button
+                  onClick={async () => {
+                    if (compressBusy) return;
+                    if (!window.confirm("压缩上下文？\n\n系统会将较早的聊天记录整理成会话摘要。原始消息不会删除。摘要应用后，稳定前缀会变化一次，后续对话成本通常会降低。")) return;
+                    const result = await onCompressContext();
+                    if (result) {
+                      const apply = window.confirm("摘要已生成，是否应用？\n\n点击[确定]将保存并启用新摘要。点击[取消]将丢弃预览。");
+                      if (apply && onSaveSummaryText) {
+                        await onSaveSummaryText(result);
+                        alert("摘要已应用。稳定前缀已更新，后续连续聊天缓存会逐步恢复。");
+                      }
+                    }
+                  }}
+                  disabled={compressBusy}
+                  className={`neo-button flex w-full items-center justify-center gap-1.5 rounded-[16px] px-3 py-2 text-xs font-medium transition-all ${
+                    (contextTokenUsed && contextTokenLimit && contextTokenUsed / contextTokenLimit >= 0.5)
+                      ? "text-brand-600 hover:text-brand-700"
+                      : "text-ink-400"
+                  }`}
+                >
+                  {compressBusy ? (
+                    <>
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      压缩中...
+                    </>
+                  ) : (
+                    <>手动压缩上下文</>
+                  )}
+                </button>
+
+                {compressPreview && (
+                  <details className="stats-chip">
+                    <summary className="cursor-pointer font-medium text-ink-500">上次压缩预览</summary>
+                    <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-[11px] text-ink-400">{compressPreview}</p>
+                  </details>
+                )}
+              </>
+            ) : (
+              <p>发送消息后将显示上下文窗口用量。</p>
             )}
           </div>
         </ContextSectionCard>
