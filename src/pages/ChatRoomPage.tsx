@@ -497,7 +497,7 @@ export function ChatRoomPage() {
             </p>
           </div>
           {providerConfig.storageMode === "hosted_encrypted" && (
-            <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管·非流式</span>
+            <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700">托管·流式</span>
           )}
           <ModeBadge />
         </div>
@@ -731,7 +731,7 @@ export function ChatRoomPage() {
           </div>
           <div className="flex items-center gap-2">
             {providerConfig.storageMode === "hosted_encrypted" && (
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-700">托管模式 · 非流式</span>
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-sky-700">托管模式 · 流式</span>
             )}
             {chat.saveStatus === "saving" && <span className="text-xs text-ink-300">保存中...</span>}
             {chat.saveStatus === "saved" && <span className="text-xs text-emerald-500">已保存</span>}

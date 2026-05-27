@@ -8,6 +8,7 @@ import type {
   ProviderMeta,
   ProviderRuntimeMode,
   ProviderType,
+  ProviderUsage,
   TestResult,
 } from "./provider.types";
 import { AVAILABLE_PROVIDERS, DEFAULT_PROVIDER_CONFIG } from "./provider.types";
@@ -15,7 +16,7 @@ import { deepseekProvider } from "./deepseekProvider";
 import { mockProvider } from "./mockProvider";
 import { openAICompatibleProvider } from "./openAICompatibleProvider";
 import { configError } from "./providerErrors";
-import { sendHostedProviderChat, testHostedCredential } from "../services/hostedCredentialsService";
+import { sendHostedProviderChat, sendHostedProviderChatStream, testHostedCredential } from "../services/hostedCredentialsService";
 import { loadApiKey } from "../storage/apiKeyStorage";
 import { getCompatibilityAdapterType } from "./providerPresets";
 
@@ -165,32 +166,90 @@ export function sendProviderStreamRequest(
 
   if (config.apiKeyStorageMode === "hosted_encrypted" && config.credentialId) {
     return (async function* () {
-      const result = await sendHostedProviderChat({
-        credential_id: config.credentialId as string,
-        provider_type: config.provider as Exclude<ProviderType, "mock">,
-        model: config.model,
-        messages,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        stream: false,
+      const chunks: { content: string }[] = [];
+      let hostedUsage: ProviderUsage | null = null;
+      let streamError: Error | null = null;
+      let streamDone = false;
+
+      const donePromise = new Promise<void>((resolve) => {
+        sendHostedProviderChatStream(
+          {
+            credential_id: config.credentialId as string,
+            provider_type: config.provider as Exclude<ProviderType, "mock">,
+            model: config.model,
+            messages,
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
+          },
+          {
+            onDelta: (text) => {
+              chunks.push({ content: text });
+            },
+            onUsage: (usage) => {
+              hostedUsage = usage;
+            },
+            onDone: () => {
+              streamDone = true;
+              resolve();
+            },
+            onError: (error) => {
+              streamError = error;
+              resolve();
+            },
+          },
+          signal,
+        );
       });
-      const hostedUsage =
-        result.usage ??
+
+      // Yield deltas as they accumulate (poll every 80ms, yield new content)
+      // We use a polling approach since the stream callback fills chunks array
+      const pollInterval = 80;
+      let yieldedCount = 0;
+      while (!streamDone && !streamError && !signal?.aborted) {
+        await Promise.race([
+          donePromise,
+          new Promise((r) => setTimeout(r, pollInterval)),
+        ]);
+        while (yieldedCount < chunks.length) {
+          yield { content: chunks[yieldedCount].content, done: false };
+          yieldedCount++;
+        }
+      }
+
+      // Yield any remaining chunks
+      while (yieldedCount < chunks.length) {
+        yield { content: chunks[yieldedCount].content, done: false };
+        yieldedCount++;
+      }
+
+      if (signal?.aborted) {
+        yield { content: "", done: true };
+        return;
+      }
+
+      if (streamError) {
+        throw streamError;
+      }
+
+      const usage =
+        hostedUsage ??
         {
           usageAvailable: false,
           usageUnavailableReason: "托管聊天服务未返回本次用量，请确认 hosted-provider-chat 已部署到最新版本。",
           rawUsage: null,
           sourceProvider: config.provider,
         };
+
+      // Yield empty content chunk with usage, then final done
       yield {
-        content: result.content,
+        content: "",
         done: false,
-        usage: hostedUsage,
+        usage,
       };
       yield {
         content: "",
         done: true,
-        usage: hostedUsage,
+        usage,
       };
     })();
   }

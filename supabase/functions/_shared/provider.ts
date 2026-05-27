@@ -141,6 +141,137 @@ export async function providerChat(config: {
   };
 }
 
+/**
+ * Stream chat completion via SSE, returning a Deno Response with text/event-stream.
+ * The caller should return this Response directly from the Edge Function handler.
+ *
+ * SSE events emitted:
+ *   event: delta  data: {"text":"..."}
+ *   event: usage  data: {"usage":{...HostedProviderUsage...}}
+ *   event: done   data: {}
+ *   event: error  data: {"message":"..."}
+ */
+export async function providerChatStream(config: {
+  providerType: HostedProviderType;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  messages: HostedProviderMessage[];
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<Response> {
+  const isDeepSeek = config.providerType === "deepseek";
+
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages: config.messages,
+    temperature: config.temperature ?? 0.8,
+    max_tokens: config.maxTokens ?? 1200,
+    stream: true,
+  };
+
+  if (isDeepSeek) {
+    body.stream_options = { include_usage: true };
+  }
+
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new ProviderHttpError(response.status, errText || "聊天请求失败");
+  }
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        const err = sseEvent("error", { message: "Provider 未返回流式响应。" });
+        controller.enqueue(encoder.encode(err));
+        controller.close();
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalUsage: HostedProviderUsage | null = null;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") {
+              // Send usage before done if we captured it
+              if (finalUsage) {
+                controller.enqueue(encoder.encode(sseEvent("usage", { usage: finalUsage })));
+              }
+              controller.enqueue(encoder.encode(sseEvent("done", {})));
+              controller.close();
+              return;
+            }
+            try {
+              const json = JSON.parse(data);
+              if (json.usage) {
+                finalUsage = normalizeHostedProviderUsage(config.providerType, json.usage);
+              }
+              const delta = json.choices?.[0]?.delta?.content;
+              if (delta) {
+                controller.enqueue(encoder.encode(sseEvent("delta", { text: delta })));
+              }
+            } catch {
+              // skip malformed SSE lines
+            }
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "流式读取失败";
+        controller.enqueue(encoder.encode(sseEvent("error", { message })));
+        controller.close();
+        return;
+      } finally {
+        try { reader.releaseLock(); } catch { /* ignore */ }
+      }
+
+      // Stream ended without [DONE]
+      if (finalUsage) {
+        controller.enqueue(encoder.encode(sseEvent("usage", { usage: finalUsage })));
+      }
+      controller.enqueue(encoder.encode(sseEvent("done", {})));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function sseEvent(event: string, data: Record<string, unknown>): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export async function providerFetchBalance(config: {
   providerType: HostedProviderType;
   baseUrl: string;

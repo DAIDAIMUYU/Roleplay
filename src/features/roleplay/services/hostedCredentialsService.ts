@@ -5,6 +5,7 @@ import type {
   ChatResult,
   ProviderBalanceSnapshot,
   ProviderType,
+  ProviderUsage,
   TestResult,
 } from "../providers";
 import { translateError } from "../providers";
@@ -205,6 +206,150 @@ export async function sendHostedProviderChat(input: HostedProviderChatInput): Pr
     body: input,
   });
   return payload;
+}
+
+export interface HostedStreamCallbacks {
+  onDelta?: (text: string) => void;
+  onUsage?: (usage: ProviderUsage) => void;
+  onDone?: () => void;
+  onError?: (error: Error) => void;
+}
+
+/**
+ * Stream chat completion via the hosted-provider-chat Edge Function.
+ * Reads the SSE text/event-stream and calls the provided callbacks.
+ */
+export async function sendHostedProviderChatStream(
+  input: HostedProviderChatInput,
+  callbacks: HostedStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!supabase) throw new Error("Supabase 未配置。");
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("当前未登录，无法使用托管 API 凭据。");
+
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const url = `${baseUrl}/functions/v1/hosted-provider-chat`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...input, stream: true }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text);
+      detail = parsed?.detail ?? parsed?.message ?? text;
+    } catch {
+      // use raw text
+    }
+    throw new Error(detail || `托管聊天请求失败 (${response.status})`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // Fallback: read as JSON (non-streaming response from edge function)
+    const text = await response.text().catch(() => "");
+    try {
+      const json = JSON.parse(text);
+      if (json.content) callbacks.onDelta?.(json.content);
+      if (json.usage) {
+        callbacks.onUsage?.({
+          ...json.usage,
+          usageAvailable: json.usage.usageAvailable ?? true,
+        } as ProviderUsage);
+      }
+      callbacks.onDone?.();
+    } catch {
+      callbacks.onError?.(new Error("无法解析托管聊天响应。"));
+    }
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        reader.cancel();
+        callbacks.onDone?.();
+        return;
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+
+        const lines = trimmed.split("\n");
+        let eventType = "";
+        let dataStr = "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataStr = line.slice(6).trim();
+          }
+        }
+
+        if (!eventType || !dataStr) continue;
+
+        try {
+          const data = JSON.parse(dataStr);
+          switch (eventType) {
+            case "delta":
+              if (data.text) callbacks.onDelta?.(data.text);
+              break;
+            case "usage":
+              if (data.usage) {
+                callbacks.onUsage?.({
+                  ...data.usage,
+                  usageAvailable: data.usage.usageAvailable ?? true,
+                } as ProviderUsage);
+              }
+              break;
+            case "done":
+              callbacks.onDone?.();
+              return;
+            case "error":
+              callbacks.onError?.(new Error(data.message ?? "托管聊天流式错误"));
+              return;
+          }
+        } catch {
+          // skip malformed SSE data
+        }
+      }
+    }
+  } catch (err) {
+    if (signal?.aborted) {
+      callbacks.onDone?.();
+      return;
+    }
+    callbacks.onError?.(err instanceof Error ? err : new Error("托管聊天流式读取失败"));
+    return;
+  } finally {
+    try { reader.releaseLock(); } catch { /* ignore */ }
+  }
+
+  // Stream ended without "done" event
+  callbacks.onDone?.();
 }
 
 export async function fetchHostedProviderBalance(credentialId: string): Promise<ProviderBalanceSnapshot> {

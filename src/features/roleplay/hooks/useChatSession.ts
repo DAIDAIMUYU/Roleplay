@@ -1262,7 +1262,7 @@ export function useChatSession(
         ? buildUsageUnavailable("本地预览不会返回真实 Provider 用量。", "mock")
         : buildUsageUnavailable(
             storageMode === "hosted_encrypted"
-              ? "托管聊天服务未返回本次用量，请确认 hosted-provider-chat 已部署到最新版本。"
+              ? "托管聊天服务未返回本次用量。如果已部署最新版 hosted-provider-chat，流式响应结束后会自动更新用量。"
               : "当前 Provider 未返回本次用量。",
             storedProvider,
           ));
