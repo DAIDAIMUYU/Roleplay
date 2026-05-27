@@ -462,6 +462,147 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
   };
 }
 
+/** Persisted cache diagnostics record from context_runs.components_json */
+export type CacheDiagnosticsRecord = {
+  usage?: Record<string, unknown>;
+  costEstimate?: Record<string, unknown>;
+  cacheDiag?: CacheDiagnostics | null;
+};
+
+export type CacheHealthLevel = "excellent" | "good" | "warning" | "poor" | "unknown";
+
+export interface CacheHealthSummary {
+  sampleSize: number;
+  averageHitRate?: number;
+  averageCacheMissTokens?: number;
+  averageInputTokens?: number;
+  averageEstimatedCost?: number;
+  stablePrefixChangeCount: number;
+  stablePrefixChangeRate?: number;
+  mostCommonChangeReasons: Array<{ reason: string; count: number }>;
+  healthLevel: CacheHealthLevel;
+  suggestions: string[];
+}
+
+/**
+ * Build cache health summary from the list of persisted diagnostics records.
+ * Records should be ordered by time (oldest first for trend, newest last).
+ */
+export function buildCacheHealthSummary(history: CacheDiagnosticsRecord[]): CacheHealthSummary {
+  const records = [...history].filter((r) => r.usage || r.cacheDiag);
+  const sampleSize = records.length;
+
+  if (sampleSize < 2) {
+    return {
+      sampleSize,
+      stablePrefixChangeCount: 0,
+      mostCommonChangeReasons: [],
+      healthLevel: "unknown",
+      suggestions: ["发送更多消息后即可查看缓存健康趋势。"],
+    };
+  }
+
+  // Compute averages from usage data
+  let hitRateSum = 0;
+  let hitRateCount = 0;
+  let cacheMissSum = 0;
+  let cacheMissCount = 0;
+  let inputSum = 0;
+  let inputCount = 0;
+  let costSum = 0;
+  let costCount = 0;
+
+  for (const r of records) {
+    const u = r.usage;
+    if (u) {
+      const hr = typeof u.cacheHitRate === "number" ? u.cacheHitRate : undefined;
+      if (hr !== undefined) { hitRateSum += hr; hitRateCount++; }
+
+      const cm = typeof u.cacheMissInputTokens === "number" ? u.cacheMissInputTokens : undefined;
+      if (cm !== undefined) { cacheMissSum += cm; cacheMissCount++; }
+
+      const it = typeof u.inputTokens === "number" ? u.inputTokens : undefined;
+      if (it !== undefined) { inputSum += it; inputCount++; }
+    }
+    const ce = r.costEstimate;
+    if (ce && typeof (ce as Record<string, unknown>).totalCost === "number") {
+      costSum += (ce as Record<string, unknown>).totalCost as number;
+      costCount++;
+    }
+  }
+
+  // Count prefix changes
+  let changeCount = 0;
+  const changeReasonFreq: Record<string, number> = {};
+  for (let i = 1; i < records.length; i++) {
+    const prev = records[i - 1].cacheDiag;
+    const curr = records[i].cacheDiag;
+    if (prev?.snapshot?.hash && curr?.snapshot?.hash && prev.snapshot.hash !== curr.snapshot.hash) {
+      changeCount++;
+      if (curr.prefixChangeReasons) {
+        for (const reason of curr.prefixChangeReasons) {
+          if (reason !== "no_previous_snapshot" && reason !== "unchanged") {
+            changeReasonFreq[reason] = (changeReasonFreq[reason] ?? 0) + 1;
+          }
+        }
+      }
+    }
+  }
+
+  const mostCommonChangeReasons = Object.entries(changeReasonFreq)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([reason, count]) => ({ reason, count }));
+
+  const averageHitRate = hitRateCount > 0 ? hitRateSum / hitRateCount : undefined;
+  const averageCacheMissTokens = cacheMissCount > 0 ? Math.round(cacheMissSum / cacheMissCount) : undefined;
+  const averageInputTokens = inputCount > 0 ? Math.round(inputSum / inputCount) : undefined;
+  const averageEstimatedCost = costCount > 0 ? costSum / costCount : undefined;
+  const stablePrefixChangeRate = records.length > 1 ? changeCount / (records.length - 1) : undefined;
+
+  // Determine health level
+  let healthLevel: CacheHealthLevel = "unknown";
+  if (averageHitRate !== undefined) {
+    if (averageHitRate >= 0.8 && (stablePrefixChangeRate ?? 1) <= 0.1) healthLevel = "excellent";
+    else if (averageHitRate >= 0.6 && (stablePrefixChangeRate ?? 1) <= 0.25) healthLevel = "good";
+    else if (averageHitRate >= 0.35 || (stablePrefixChangeRate ?? 1) <= 0.5) healthLevel = "warning";
+    else healthLevel = "poor";
+  }
+
+  // Generate suggestions
+  const suggestions: string[] = [];
+  if (changeCount > 0 && changeCount / records.length > 0.3) {
+    suggestions.push("前缀频繁变化：检查是否在对话中修改了角色、模板、世界书或摘要。");
+  }
+  const dynTokens = records.reduce((sum, r) => sum + (r.cacheDiag?.dynamicContextTokens ?? 0), 0) / records.length;
+  const stableTokens = records.reduce((sum, r) => sum + (r.cacheDiag?.stablePrefixTokens ?? 0), 0) / records.length;
+  if (stableTokens > 0 && dynTokens / stableTokens > 0.5) {
+    suggestions.push("动态上下文占比较高：可减少本轮世界书/记忆召回数量。");
+  }
+  if (averageHitRate !== undefined && averageHitRate < 0.5) {
+    suggestions.push("缓存命中率偏低：建议保持同一会话连续对话，避免频繁修改角色设定。");
+  }
+  if (averageEstimatedCost !== undefined && averageEstimatedCost > 0.01) {
+    suggestions.push("平均费用偏高：提高缓存命中率可显著降低 DeepSeek 输入成本。");
+  }
+  if (suggestions.length === 0) {
+    suggestions.push("缓存健康度良好，继续保持当前使用习惯。");
+  }
+
+  return {
+    sampleSize,
+    averageHitRate,
+    averageCacheMissTokens,
+    averageInputTokens,
+    averageEstimatedCost,
+    stablePrefixChangeCount: changeCount,
+    stablePrefixChangeRate,
+    mostCommonChangeReasons,
+    healthLevel,
+    suggestions: suggestions.slice(0, 3),
+  };
+}
+
 export function collectActiveEntries(entries: WorldbookEntryRow[]): WorldbookEntryRow[] {
   return entries.filter((entry) => entry.enabled);
 }

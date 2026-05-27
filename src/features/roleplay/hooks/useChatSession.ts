@@ -17,7 +17,7 @@ import * as LocalRepo from "../repositories/localRoleplayRepository";
 import * as LocalMirror from "../repositories/localMirror";
 import type { CharacterRow, ContextRunRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
-import { buildContext, type CacheDiagnostics, type ContextBuildOutput } from "../context/contextBuilder";
+import { buildContext, type CacheDiagnostics, type CacheDiagnosticsRecord, type ContextBuildOutput } from "../context/contextBuilder";
 import { getPresetName } from "../providers/providerPresets";
 import { estimateDeepSeekCost } from "../providers/pricing/deepseekPricing";
 import { fetchHostedProviderBalance } from "../services/hostedCredentialsService";
@@ -68,6 +68,7 @@ export interface ChatState {
   latestProviderUsage: ProviderUsage | null;
   latestCostEstimate: ProviderCostEstimate | null;
   cacheDiag: CacheDiagnostics | null;
+  cacheDiagHistory: CacheDiagnosticsRecord[];
   providerBalance: ProviderBalanceSnapshot | null;
   isBalanceLoading: boolean;
   balanceError: string | null;
@@ -119,10 +120,7 @@ export interface MemorySuggestionDraft {
   sourceMessageId: string | null;
 }
 
-interface ContextRunComponentsPayload {
-  usage?: ProviderUsage | null;
-  costEstimate?: ProviderCostEstimate | null;
-}
+
 
 function isDeepSeekProvider(provider: ProviderType): boolean {
   return provider === "deepseek";
@@ -152,18 +150,32 @@ function toFriendlyBalanceError(
   return "余额查询失败，请稍后重试。";
 }
 
-function readLatestUsageFromContextRun(contextRun: ContextRunRow | null | undefined): {
+function readDiagnosticsFromContextRun(contextRun: ContextRunRow | null | undefined): {
   usage: ProviderUsage | null;
   costEstimate: ProviderCostEstimate | null;
+  cacheDiag: CacheDiagnostics | null;
 } {
-  if (!contextRun) return { usage: null, costEstimate: null };
+  if (!contextRun) return { usage: null, costEstimate: null, cacheDiag: null };
 
   const componentsArray = Array.isArray(contextRun.components_json) ? contextRun.components_json : [];
-  const merged = componentsArray.find((item) => item && typeof item === "object") as ContextRunComponentsPayload | undefined;
+  const merged = componentsArray.find((item) => item && typeof item === "object") as Record<string, unknown> | undefined;
   return {
-    usage: merged?.usage ?? null,
-    costEstimate: merged?.costEstimate ?? null,
+    usage: (merged?.usage ?? null) as ProviderUsage | null,
+    costEstimate: (merged?.costEstimate ?? null) as ProviderCostEstimate | null,
+    cacheDiag: (merged?.cacheDiag ?? null) as CacheDiagnostics | null,
   };
+}
+
+function extractHistory(runs: ContextRunRow[]): CacheDiagnosticsRecord[] {
+  return runs.map((run) => {
+    const componentsArray = Array.isArray(run.components_json) ? run.components_json : [];
+    const merged = componentsArray.find((item) => item && typeof item === "object") as Record<string, unknown> | undefined;
+    return {
+      usage: (merged?.usage ?? null) as Record<string, unknown> | undefined,
+      costEstimate: (merged?.costEstimate ?? null) as Record<string, unknown> | undefined,
+      cacheDiag: (merged?.cacheDiag ?? null) as CacheDiagnostics | null,
+    };
+  });
 }
 
 interface BuiltContext {
@@ -384,6 +396,7 @@ export function useChatSession(
     latestProviderUsage: null,
     latestCostEstimate: null,
     cacheDiag: null,
+    cacheDiagHistory: [],
     providerBalance: null,
     isBalanceLoading: false,
     balanceError: null,
@@ -817,7 +830,15 @@ export function useChatSession(
         console.warn("[Chat] context run load failed:", error);
         return null;
       });
-      const latestUsagePayload = readLatestUsageFromContextRun(latestContextRun);
+      const latestDiag = readDiagnosticsFromContextRun(latestContextRun);
+      const recentRuns = await withTimeout(
+        (isLocalMode
+          ? LocalRepo.listRecentContextRuns(id, 20)
+          : Repo.listRecentContextRuns(supabase!, userId!, id, 20)),
+        5000,
+        "context run history load timed out",
+      ).catch(() => [] as ContextRunRow[]);
+      const cacheDiagHistory = extractHistory(recentRuns);
 
       loadedSessionRef.current = id;
       setState((s) => ({
@@ -843,8 +864,10 @@ export function useChatSession(
         editedIndices: metadata.editedIndices,
         hasMoreMessages: page.hasMore,
         isLoadingOlderMessages: false,
-        latestProviderUsage: latestUsagePayload.usage,
-        latestCostEstimate: latestUsagePayload.costEstimate,
+        latestProviderUsage: latestDiag.usage,
+        latestCostEstimate: latestDiag.costEstimate,
+        cacheDiag: latestDiag.cacheDiag ?? null,
+        cacheDiagHistory,
         providerBalance: null,
         isBalanceLoading: false,
         balanceError: null,
@@ -1364,7 +1387,7 @@ export function useChatSession(
                 output_tokens: usageForDisplay.outputTokens ?? null,
                 cache_hit_tokens: usageForDisplay.cacheHitInputTokens ?? null,
                 cost_usd: costEstimate?.totalCost ?? null,
-                components_json: [{ usage: usageForDisplay, costEstimate }],
+                components_json: [{ usage: usageForDisplay, costEstimate, cacheDiag: stateRef.current.cacheDiag }],
               })
             : Repo.saveContextRun(supabase!, userId!, {
             session_id: sessionId,
@@ -1386,7 +1409,7 @@ export function useChatSession(
             output_tokens: usageForDisplay.outputTokens ?? null,
             cache_hit_tokens: usageForDisplay.cacheHitInputTokens ?? null,
             cost_usd: costEstimate?.totalCost ?? null,
-            components_json: [{ usage: usageForDisplay, costEstimate }],
+            components_json: [{ usage: usageForDisplay, costEstimate, cacheDiag: stateRef.current.cacheDiag }],
           });
           crPromise.then((cr) => {
             if (!isLocalMode && cr) LocalMirror.mirrorContextRun(cr);

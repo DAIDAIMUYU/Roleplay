@@ -855,3 +855,11 @@ export async function listContextRuns(sessionId?: string): Promise<ContextRunRow
     .filter((row) => !sessionId || row.session_id === sessionId)
     .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
 }
+
+export async function listRecentContextRuns(
+  sessionId: string,
+  limit = 20,
+): Promise<ContextRunRow[]> {
+  const rows = await listContextRuns(sessionId);
+  return rows.slice(0, limit);
+}

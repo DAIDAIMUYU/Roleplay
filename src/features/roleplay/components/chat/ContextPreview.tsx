@@ -20,7 +20,7 @@ import {
 import type { CharacterRow, MemoryRow, PromptTemplateRow, WorldbookRow } from "../../types/database";
 import type { ProviderBalanceSnapshot, ProviderCostEstimate, ProviderUsage } from "../../providers/provider.types";
 import { parseCharacterCard } from "../../utils/characterPrompt";
-import type { CacheDiagnostics, ContextBuildOutput } from "../../context/contextBuilder";
+import { buildCacheHealthSummary, type CacheDiagnostics, type CacheDiagnosticsRecord, type CacheHealthLevel, type CacheHealthSummary, type ContextBuildOutput } from "../../context/contextBuilder";
 import { estimateTokens } from "../../context/tokenBudget";
 import { supabase } from "../../../auth/supabaseClient";
 import * as Repo from "../../repositories/roleplayRepository";
@@ -54,6 +54,7 @@ interface ContextPreviewProps {
   latestUsage?: ProviderUsage | null;
   latestCostEstimate?: ProviderCostEstimate | null;
   cacheDiag?: CacheDiagnostics | null;
+  cacheDiagHistory?: CacheDiagnosticsRecord[];
   providerBalance?: ProviderBalanceSnapshot | null;
   isBalanceLoading?: boolean;
   balanceError?: string | null;
@@ -127,6 +128,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     latestUsage,
     latestCostEstimate,
     cacheDiag,
+    cacheDiagHistory,
     providerBalance,
     isBalanceLoading,
     balanceError,
@@ -148,6 +150,9 @@ export function ContextPreview(props: ContextPreviewProps) {
 
   const card = activeCharacter ? parseCharacterCard(activeCharacter) : null;
   const finalPrompt = lastContextOutput?.systemPrompt || systemPrompt || "";
+  const healthSummary: CacheHealthSummary = buildCacheHealthSummary(cacheDiagHistory ?? []);
+  const healthLabels: Record<CacheHealthLevel, string> = { excellent: "优秀", good: "良好", warning: "注意", poor: "较差", unknown: "数据不足" };
+  const healthColorClasses: Record<CacheHealthLevel, string> = { excellent: "bg-emerald-50 text-emerald-700", good: "bg-sky-50 text-sky-700", warning: "bg-amber-50 text-amber-700", poor: "bg-rose-50 text-rose-700", unknown: "bg-surface-100 text-ink-500" };
   const injectedHits = lastContextOutput?.triggerResult.triggered.filter((hit) => hit.injected) ?? [];
   const skippedEntries = lastContextOutput?.triggerResult.skipped ?? [];
   const injectedMemoryIds = new Set(lastContextOutput?.budget.memories.map((memory) => memory.id) ?? []);
@@ -714,6 +719,89 @@ export function ContextPreview(props: ContextPreviewProps) {
               </>
             ) : (
               <p>暂无上一轮对比数据。发送消息后将生成缓存诊断。</p>
+            )}
+          </div>
+        </ContextSectionCard>
+
+
+        {/* ── Cache Health Panel ── */}
+        <ContextSectionCard
+          title="缓存健康"
+          icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />}
+          badge={`${healthLabels[healthSummary.healthLevel]} · ${healthSummary.sampleSize}次`}
+          level={3}
+          variant="debug"
+        >
+          <div className="space-y-2 pb-1 text-xs text-ink-400">
+            {(cacheDiagHistory && cacheDiagHistory.length >= 2) ? (
+              <>
+                <div className="stats-chip flex items-center justify-between">
+                  <span>健康度</span>
+                  <span className={"neo-pill text-[10px] " + healthColorClasses[healthSummary.healthLevel]}>{healthLabels[healthSummary.healthLevel]}</span>
+                </div>
+
+                <div className="stats-chip">
+                  <span className="mb-1.5 block text-ink-400">最近 {Math.min(cacheDiagHistory.length, 20)} 次命中趋势</span>
+                  <div className="flex items-end gap-0.5" style={{ height: 32 }}>
+                    {cacheDiagHistory.slice(-20).map((r, i) => {
+                      const hr = (r.usage && typeof (r.usage as Record<string,unknown>).cacheHitRate === "number") ? (r.usage as Record<string,unknown>).cacheHitRate as number : null;
+                      const color = hr === null ? "bg-ink-200" : hr >= 0.7 ? "bg-emerald-500" : hr >= 0.4 ? "bg-amber-400" : "bg-rose-400";
+                      return (
+                        <div key={i} className={"flex-1 rounded-t-sm " + color}
+                          style={{ height: hr !== null ? `${Math.max(4, Math.round(hr * 32))}px` : "4px" }}
+                          title={hr !== null ? `命中率 ${Math.round(hr * 100)}%` : "无数据"}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {healthSummary.averageHitRate !== undefined && (
+                    <div className="stats-chip flex items-center justify-between"><span>平均命中率</span><span>{formatPercent(healthSummary.averageHitRate)}</span></div>
+                  )}
+                  {healthSummary.averageCacheMissTokens !== undefined && (
+                    <div className="stats-chip flex items-center justify-between"><span>平均未命中</span><span>{formatToken(healthSummary.averageCacheMissTokens)} tok</span></div>
+                  )}
+                  {healthSummary.averageInputTokens !== undefined && (
+                    <div className="stats-chip flex items-center justify-between"><span>平均输入</span><span>{formatToken(healthSummary.averageInputTokens)} tok</span></div>
+                  )}
+                  {healthSummary.averageEstimatedCost !== undefined && (
+                    <div className="stats-chip flex items-center justify-between"><span>平均费用</span><span>{formatUsd(healthSummary.averageEstimatedCost)}</span></div>
+                  )}
+                </div>
+
+                <div className="stats-chip flex items-center justify-between">
+                  <span>前缀变化</span>
+                  <span>{healthSummary.stablePrefixChangeCount}/{healthSummary.sampleSize} 次{healthSummary.stablePrefixChangeRate !== undefined ? ` (${Math.round(healthSummary.stablePrefixChangeRate * 100)}%)` : ""}</span>
+                </div>
+                {healthSummary.mostCommonChangeReasons.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {healthSummary.mostCommonChangeReasons.map(({ reason, count }) => (
+                      <span key={reason} className="neo-pill bg-amber-50 text-[10px] text-amber-700">
+                        {{system_rules_changed:"系统规则",character_changed:"角色设定",templates_changed:"模板",persistent_worldbooks_changed:"世界书",core_memories_changed:"记忆",summary_changed:"摘要"}[reason]||reason} ×{count}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {healthSummary.suggestions.length > 0 && (
+                  <details className="stats-chip">
+                    <summary className="cursor-pointer font-medium text-ink-500">优化建议</summary>
+                    <div className="mt-1.5 space-y-1">
+                      {healthSummary.suggestions.map((s, i) => (
+                        <p key={i} className="text-[11px] text-ink-400">{i + 1}. {s}</p>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                <p className="text-[11px] text-ink-300">
+                  测试缓存：选择同一角色和会话，连续发送 5 条消息不修改设置，观察命中率是否上升。
+                </p>
+              </>
+            ) : (
+              <p>发送更多消息后即可查看缓存健康趋势。</p>
             )}
           </div>
         </ContextSectionCard>

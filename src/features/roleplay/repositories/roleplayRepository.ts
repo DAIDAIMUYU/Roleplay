@@ -1186,6 +1186,26 @@ export async function saveContextRun(
   return data as ContextRunRow | null;
 }
 
+export async function listRecentContextRuns(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  limit = 20,
+): Promise<ContextRunRow[]> {
+  const { data, error } = await supabase
+    .from("context_runs")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn("[Repo] listRecentContextRuns failed:", error);
+    return [];
+  }
+  return (data as ContextRunRow[]) ?? [];
+}
+
 // ---------- app settings ----------
 
 const DEFAULT_SETTINGS: AppSettings = {

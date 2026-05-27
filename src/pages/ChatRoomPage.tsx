@@ -337,6 +337,7 @@ export function ChatRoomPage() {
     latestUsage: chat.latestProviderUsage,
     latestCostEstimate: chat.latestCostEstimate,
     cacheDiag: chat.cacheDiag,
+    cacheDiagHistory: chat.cacheDiagHistory,
     providerBalance: chat.providerBalance,
     isBalanceLoading: chat.isBalanceLoading,
     balanceError: chat.balanceError,
