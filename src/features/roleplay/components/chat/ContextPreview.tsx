@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { CharacterRow, MemoryRow, PromptTemplateRow, WorldbookRow } from "../../types/database";
+import type { ProviderBalanceSnapshot, ProviderCostEstimate, ProviderUsage } from "../../providers/provider.types";
 import { parseCharacterCard } from "../../utils/characterPrompt";
 import type { ContextBuildOutput } from "../../context/contextBuilder";
 import { estimateTokens } from "../../context/tokenBudget";
@@ -50,6 +51,11 @@ interface ContextPreviewProps {
   isGeneratingMemorySuggestions?: boolean;
   activeBranchName?: string | null;
   contextRunSaveStatus?: "idle" | "saved" | "failed" | null;
+  latestUsage?: ProviderUsage | null;
+  latestCostEstimate?: ProviderCostEstimate | null;
+  providerBalance?: ProviderBalanceSnapshot | null;
+  isBalanceLoading?: boolean;
+  balanceError?: string | null;
   onAddTemplate: (id: string) => Promise<void>;
   onRemoveTemplate: () => Promise<void>;
   onAddWorldbooks: (ids: string[]) => Promise<void>;
@@ -63,6 +69,7 @@ interface ContextPreviewProps {
   onSaveSummaryText: (text: string) => Promise<void>;
   onClearSummary: () => Promise<void>;
   onGenerateSummary: () => Promise<string | null>;
+  onRefreshBalance: () => Promise<void>;
 }
 
 function PickerModal({
@@ -74,6 +81,7 @@ function PickerModal({
   children: ReactNode;
   onClose: () => void;
 }) {
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -115,6 +123,11 @@ export function ContextPreview(props: ContextPreviewProps) {
     isGeneratingMemorySuggestions,
     activeBranchName,
     contextRunSaveStatus,
+    latestUsage,
+    latestCostEstimate,
+    providerBalance,
+    isBalanceLoading,
+    balanceError,
     onAddTemplate,
     onRemoveTemplate,
     onAddWorldbooks,
@@ -128,6 +141,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     onSaveSummaryText,
     onClearSummary,
     onGenerateSummary,
+    onRefreshBalance,
   } = props;
 
   const card = activeCharacter ? parseCharacterCard(activeCharacter) : null;
@@ -224,6 +238,35 @@ export function ContextPreview(props: ContextPreviewProps) {
     { label: "运行", value: runtimeMode, icon: <Cpu className="h-4 w-4" /> },
     { label: "API", value: isDemo ? "本地预览" : apiConfigured ? "已配置" : "未配置", icon: apiConfigured ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" /> },
   ];
+
+  const isDeepSeek = !isDemo && providerLabel.toLowerCase().includes("deepseek");
+  const usageAvailable = latestUsage?.usageAvailable;
+  const currentContextTokens = lastContextOutput?.estimatedTokens ?? null;
+  const contextWindowLimit = isDeepSeek ? 1_000_000 : (lastContextOutput?.budget.budgetLimit ?? null);
+  const contextUsageRate =
+    currentContextTokens !== null && contextWindowLimit && contextWindowLimit > 0
+      ? currentContextTokens / contextWindowLimit
+      : null;
+  const contextWindowStatus =
+    contextUsageRate === null
+      ? "??"
+      : contextUsageRate < 0.7
+        ? "??"
+        : contextUsageRate < 0.9
+          ? "????"
+          : "????";
+
+  function formatToken(value?: number) {
+    return typeof value === "number" ? value.toLocaleString("zh-CN") : "???";
+  }
+
+  function formatPercent(value?: number) {
+    return typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "???";
+  }
+
+  function formatUsd(value?: number) {
+    return typeof value === "number" ? `$${value.toFixed(6)}` : "???";
+  }
 
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-white/80 to-sky-50/25">
@@ -558,18 +601,127 @@ export function ContextPreview(props: ContextPreviewProps) {
           </div>
         </ContextSectionCard>
 
-        <ContextSectionCard title="Token 预算" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={lastContextOutput ? `${lastContextOutput.estimatedTokens}/${lastContextOutput.budget.budgetLimit}` : "预览"} level={3} variant="debug">
-          {lastContextOutput ? (
-            <div className="grid gap-2 pb-1 text-xs text-ink-400 sm:grid-cols-2">
-              <div className="stats-chip flex items-center justify-between"><span>角色 + 模板</span><span>{estimateTokens(lastContextOutput.budget.characterPrompt + lastContextOutput.budget.templatePrompt)}</span></div>
-              <div className="stats-chip flex items-center justify-between"><span>世界书 ({lastContextOutput.budget.worldbookEntries.length})</span><span>{lastContextOutput.budget.worldbookEntries.reduce((sum, entry) => sum + entry.tokens, 0)}</span></div>
-              <div className="stats-chip flex items-center justify-between"><span>记忆 ({lastContextOutput.budget.memories.length})</span><span>{lastContextOutput.budget.memories.reduce((sum, memory) => sum + memory.tokens, 0)}</span></div>
-              <div className="stats-chip flex items-center justify-between"><span>摘要</span><span>{estimateTokens(lastContextOutput.budget.summary)}</span></div>
-              <div className="stats-chip flex items-center justify-between font-medium text-ink-500 sm:col-span-2"><span>总计</span><span>{lastContextOutput.estimatedTokens} / {lastContextOutput.budget.budgetLimit}</span></div>
+        <ContextSectionCard title="用量与费用" icon={<Zap className="h-3.5 w-3.5 text-ink-400" />} badge={usageAvailable ? formatToken(latestUsage?.totalTokens) : "预览"} level={3} variant="debug">
+          <p className="mb-2 text-[11px] text-ink-300">仅统计与估算，不限制发送。</p>
+          <div className="space-y-3 pb-1 text-xs text-ink-400">
+            <div className="neo-panel-soft space-y-2 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">本次请求</span>
+                <span className="neo-pill text-[10px]">{usageAvailable ? "Provider usage" : "未返回"}</span>
+              </div>
+              {usageAvailable ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="stats-chip flex items-center justify-between"><span>输入 token</span><span>{formatToken(latestUsage?.inputTokens)}</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>输出 token</span><span>{formatToken(latestUsage?.outputTokens)}</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>总 token</span><span>{formatToken(latestUsage?.totalTokens)}</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>推理 token</span><span>{formatToken(latestUsage?.reasoningTokens)}</span></div>
+                </div>
+              ) : (
+                <p>{latestUsage?.usageUnavailableReason ?? "当前 Provider 未返回本次用量。"}</p>
+              )}
             </div>
-          ) : (
-            <p className="pb-1 text-xs text-ink-300">{contextPreviewError ? "上下文预览失败，可继续聊天" : "上下文预览构建中。"}</p>
-          )}
+
+            <div className="neo-panel-soft space-y-2 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">缓存命中</span>
+                <span className="neo-pill text-[10px]">{isDeepSeek ? "DeepSeek" : "暂未适配"}</span>
+              </div>
+              {isDeepSeek ? (
+                latestUsage?.cacheHitInputTokens !== undefined || latestUsage?.cacheMissInputTokens !== undefined ? (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="stats-chip flex items-center justify-between"><span>命中 token</span><span>{formatToken(latestUsage?.cacheHitInputTokens)}</span></div>
+                      <div className="stats-chip flex items-center justify-between"><span>未命中 token</span><span>{formatToken(latestUsage?.cacheMissInputTokens)}</span></div>
+                      <div className="stats-chip flex items-center justify-between sm:col-span-2"><span>命中率</span><span>{formatPercent(latestUsage?.cacheHitRate)}</span></div>
+                    </div>
+                    <p className="text-[11px] text-ink-300">缓存命中越高，输入成本越低。</p>
+                  </>
+                ) : (
+                  <p>本次 DeepSeek 响应未返回缓存明细。</p>
+                )
+              ) : (
+                <p>当前阶段仅 DeepSeek 支持缓存命中明细。</p>
+              )}
+            </div>
+
+            <div className="neo-panel-soft space-y-2 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">费用估算</span>
+                <span className="neo-pill text-[10px]">{isDeepSeek ? "估算" : "DeepSeek only"}</span>
+              </div>
+              {isDeepSeek ? (
+                latestCostEstimate ? (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="stats-chip flex items-center justify-between"><span>命中输入费用</span><span>{formatUsd(latestCostEstimate.cacheHitInputCost)}</span></div>
+                      <div className="stats-chip flex items-center justify-between"><span>未命中输入费用</span><span>{formatUsd(latestCostEstimate.cacheMissInputCost ?? latestCostEstimate.inputCost)}</span></div>
+                      <div className="stats-chip flex items-center justify-between"><span>输出费用</span><span>{formatUsd(latestCostEstimate.outputCost)}</span></div>
+                      <div className="stats-chip flex items-center justify-between font-medium text-ink-500"><span>本次合计</span><span>{formatUsd(latestCostEstimate.totalCost)}</span></div>
+                    </div>
+                    <p className="text-[11px] text-ink-300">按内置价格表估算，实际扣费以 Provider 官方账单为准。</p>
+                    <p className="text-[11px] text-ink-300">DeepSeek 价格表版本：{latestCostEstimate.pricingVersion} · 更新时间：{latestCostEstimate.pricingUpdatedAt}</p>
+                    {latestCostEstimate.estimateWarning && <p className="text-[11px] text-amber-600">{latestCostEstimate.estimateWarning}</p>}
+                  </>
+                ) : (
+                  <p>当前没有可用于估算费用的 DeepSeek 用量数据。</p>
+                )
+              ) : (
+                <p>当前阶段仅支持 DeepSeek 费用估算。</p>
+              )}
+            </div>
+
+            <div className="neo-panel-soft space-y-2 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">账户余额</span>
+                <button
+                  type="button"
+                  onClick={() => void onRefreshBalance()}
+                  disabled={!isDeepSeek || !!isBalanceLoading}
+                  className="neo-button inline-flex items-center gap-1 rounded-[16px] px-2.5 py-1 text-[11px] disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isBalanceLoading ? "animate-spin" : ""}`} />
+                  {isBalanceLoading ? "刷新中..." : "刷新余额"}
+                </button>
+              </div>
+              {isDeepSeek ? (
+                providerBalance ? (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {providerBalance.balances.map((balance) => (
+                        <div key={balance.currency} className="stats-chip space-y-1">
+                          <div className="flex items-center justify-between"><span>币种</span><span>{balance.currency}</span></div>
+                          <div className="flex items-center justify-between"><span>总余额</span><span>{balance.totalBalance}</span></div>
+                          <div className="flex items-center justify-between"><span>赠送余额</span><span>{balance.grantedBalance}</span></div>
+                          <div className="flex items-center justify-between"><span>充值余额</span><span>{balance.toppedUpBalance}</span></div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-ink-300">最后刷新时间：{new Date(providerBalance.fetchedAt).toLocaleString("zh-CN")}</p>
+                  </>
+                ) : (
+                  <p>{balanceError ?? "点击“刷新余额”查询 DeepSeek 账户余额。"}</p>
+                )
+              ) : (
+                <p>当前阶段仅支持 DeepSeek 余额查询。</p>
+              )}
+            </div>
+
+            <div className="neo-panel-soft space-y-2 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-ink-500">上下文窗口</span>
+                <span className="neo-pill text-[10px]">{contextWindowStatus}</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="stats-chip flex items-center justify-between"><span>当前上下文 token</span><span>{currentContextTokens !== null ? currentContextTokens.toLocaleString("zh-CN") : "未计算"}</span></div>
+                <div className="stats-chip flex items-center justify-between"><span>模型上下文上限</span><span>{contextWindowLimit !== null ? contextWindowLimit.toLocaleString("zh-CN") : "未知"}</span></div>
+                <div className="stats-chip flex items-center justify-between sm:col-span-2"><span>使用率</span><span>{contextUsageRate !== null ? `${(contextUsageRate * 100).toFixed(1)}%` : "未知"}</span></div>
+              </div>
+              <p className="text-[11px] text-ink-300">上下文窗口接近上限时，可能需要压缩摘要或减少注入内容，否则请求可能失败。</p>
+              <button type="button" disabled className="neo-button rounded-[16px] px-2.5 py-1.5 text-[11px] text-ink-400 disabled:opacity-60">
+                压缩功能将在后续版本接入
+              </button>
+            </div>
+          </div>
         </ContextSectionCard>
 
         <ContextSectionCard title="最终 System Prompt" icon={<Eye className="h-3.5 w-3.5 text-brand-400" />} badge={estimateTokens(finalPrompt).toString()} defaultOpen level={2}>

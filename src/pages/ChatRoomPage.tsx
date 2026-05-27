@@ -334,6 +334,11 @@ export function ChatRoomPage() {
     isGeneratingMemorySuggestions: chat.isGeneratingMemorySuggestions,
     activeBranchName: chat.activeBranchName,
     contextRunSaveStatus: chat.contextRunSaveStatus,
+    latestUsage: chat.latestProviderUsage,
+    latestCostEstimate: chat.latestCostEstimate,
+    providerBalance: chat.providerBalance,
+    isBalanceLoading: chat.isBalanceLoading,
+    balanceError: chat.balanceError,
     onAddTemplate: chat.addTemplate,
     onRemoveTemplate: chat.removeTemplate,
     onAddWorldbooks: chat.addWorldbooks,
@@ -349,6 +354,7 @@ export function ChatRoomPage() {
     onSaveSummaryText: chat.saveSummary,
     onClearSummary: chat.clearSummary,
     onGenerateSummary: chat.generateSummary,
+    onRefreshBalance: chat.refreshProviderBalance,
   };
 
   function renderLoadOlderButton() {
