@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Drama, Home, LogOut, Palette, Settings, Shield, User } from "lucide-react";
+import { CircleUser, Drama, Home, Palette, Settings, Shield, User } from "lucide-react";
 import { useAuth, canAccessAdminPanel } from "../features/auth";
 import { ModeBadge } from "../shared/components/ModeBadge";
 import { SidebarCollapseButton } from "../shared/components/SidebarCollapseButton";
@@ -32,33 +32,45 @@ export function DesktopSidebar() {
     }
   }, [signOut]);
 
+  const accountLabel = isGuestOrDemo ? "网页本地模式" : isOwner ? "站主" : isAdmin ? "管理员" : "云端账号";
+  const compactAccountTitle = user?.email ? `${accountLabel}：${user.email}` : accountLabel;
+
   return (
-    <aside className={`flex h-full flex-shrink-0 flex-col neo-surface transition-all duration-200 ${collapsed ? "w-16" : "w-60"}`}
-      style={{ borderRadius: '28px' }}
+    <aside
+      className={`relative flex h-full flex-shrink-0 flex-col overflow-hidden neo-surface transition-all duration-[320ms] ${collapsed ? "w-16" : "w-60"}`}
+      style={{ borderRadius: "28px" }}
     >
-      <div className={`px-4 py-5 ${collapsed ? "flex justify-center" : ""}`}>
+      <div className={`relative z-20 px-3 py-5 ${collapsed ? "flex flex-col items-center gap-3" : ""}`}>
         {collapsed ? (
-          <Link to="/" className="neo-button flex h-9 w-9 items-center justify-center"
-            style={{ borderRadius: '14px', background: 'linear-gradient(135deg, rgb(99, 102, 241), rgb(79, 70, 229))' }}
-          >
-            <Drama className="h-4 w-4 text-white" />
-          </Link>
+          <>
+            <Link
+              to="/"
+              className="neo-button flex h-9 w-9 items-center justify-center"
+              style={{ borderRadius: "14px", background: "linear-gradient(135deg, rgb(99, 102, 241), rgb(79, 70, 229))" }}
+              title="角色酒馆"
+              aria-label="角色酒馆"
+            >
+              <Drama className="h-4 w-4 text-white" />
+            </Link>
+            <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" />
+          </>
         ) : (
-          <div className="flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center shadow-sm"
-                style={{ borderRadius: '14px', background: 'linear-gradient(135deg, rgb(99, 102, 241), rgb(79, 70, 229))' }}
+          <div className="flex items-center justify-between gap-3 px-1">
+            <Link to="/" className="flex min-w-0 items-center gap-2.5">
+              <div
+                className="flex h-9 w-9 items-center justify-center shadow-sm"
+                style={{ borderRadius: "14px", background: "linear-gradient(135deg, rgb(99, 102, 241), rgb(79, 70, 229))" }}
               >
                 <Drama className="h-4 w-4 text-white" />
               </div>
-              <span className="text-base font-semibold text-ink-900">角色酒馆</span>
+              <span className="truncate text-base font-semibold text-ink-900">角色酒馆</span>
             </Link>
             <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" />
           </div>
         )}
       </div>
 
-      <nav className="scrollbar-none flex-1 space-y-2 overflow-y-auto px-2.5 pb-2 pt-2">
+      <nav className="scrollbar-none relative z-10 flex-1 space-y-2 overflow-y-auto px-2.5 pb-2 pt-2">
         {navItems.map(({ to, label, icon }) => (
           <NavLink
             key={to}
@@ -71,8 +83,9 @@ export function DesktopSidebar() {
                   : "neo-button text-ink-500 hover:text-ink-700"
               } ${collapsed ? "justify-center" : ""}`
             }
-            style={{ borderRadius: '16px' }}
+            style={{ borderRadius: "16px" }}
             title={collapsed ? label : undefined}
+            aria-label={collapsed ? label : undefined}
           >
             {icon}
             {!collapsed && <span>{label}</span>}
@@ -89,8 +102,9 @@ export function DesktopSidebar() {
                   : "neo-button text-ink-500 hover:text-ink-700"
               } ${collapsed ? "justify-center" : ""}`
             }
-            style={{ borderRadius: '16px' }}
+            style={{ borderRadius: "16px" }}
             title={collapsed ? "管理后台" : undefined}
+            aria-label={collapsed ? "管理后台" : undefined}
           >
             <Shield className="h-5 w-5" />
             {!collapsed && <span>管理后台</span>}
@@ -98,50 +112,43 @@ export function DesktopSidebar() {
         )}
       </nav>
 
-      <div className={`border-t border-white/40 px-3 py-4 ${collapsed ? "flex flex-col items-center gap-2" : ""}`}>
+      <div className={`relative z-10 border-t border-white/40 px-3 py-4 ${collapsed ? "flex justify-center" : ""}`}>
         {collapsed ? (
-          <>
+          <div
+            className="neo-surface-soft flex h-10 w-10 items-center justify-center"
+            style={{ borderRadius: "16px" }}
+            title={compactAccountTitle}
+            aria-label={compactAccountTitle}
+          >
             {user ? (
-              <button
-                onClick={() => { if (signOutConfirm) handleSignOut(); else setSignOutConfirm(true); }}
-                disabled={signOutBusy}
-                className="neo-button flex h-9 w-9 items-center justify-center text-ink-400 hover:text-rose-500"
-                title={signOutConfirm ? "确认退出" : "退出登录"}
-                style={{ borderRadius: '14px' }}
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
+              <CircleUser className="h-4.5 w-4.5 text-ink-500" />
             ) : (
-              <SidebarCollapseButton collapsed={collapsed} onToggle={toggleCollapsed} side="left" floating />
+              <User className="h-4.5 w-4.5 text-ink-500" />
             )}
-            {signOutConfirm && user && (
-              <span className="text-[10px] text-rose-400">再点退出</span>
-            )}
-          </>
+          </div>
         ) : (
-          <div className="neo-surface-soft flex flex-col gap-2.5 p-3.5" style={{ borderRadius: '20px' }}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-ink-400">
-                {isGuestOrDemo ? "网页本地模式" : isOwner ? "站主" : isAdmin ? "管理员" : "云端账号"}
-              </span>
+          <div className="neo-surface-soft flex flex-col gap-2.5 p-3.5" style={{ borderRadius: "20px" }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-ink-400">{accountLabel}</span>
               <ModeBadge />
             </div>
             {user ? (
               <>
-                <p className="text-[11px] text-ink-500 truncate" title={user.email}>
+                <p className="truncate text-[11px] text-ink-500" title={user.email ?? undefined}>
                   {user.email}
                 </p>
                 {!signOutConfirm ? (
                   <button
+                    type="button"
                     onClick={() => setSignOutConfirm(true)}
                     className="neo-button flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-rose-500 hover:text-rose-600"
                   >
-                    <LogOut className="h-3.5 w-3.5" />
                     退出登录
                   </button>
                 ) : (
                   <div className="flex gap-1.5">
                     <button
+                      type="button"
                       onClick={() => setSignOutConfirm(false)}
                       disabled={signOutBusy}
                       className="neo-button flex-1 px-2 py-1.5 text-[11px] font-medium text-ink-500"
@@ -149,6 +156,7 @@ export function DesktopSidebar() {
                       取消
                     </button>
                     <button
+                      type="button"
                       onClick={handleSignOut}
                       disabled={signOutBusy}
                       className="neo-button-primary flex flex-1 items-center justify-center px-2 py-1.5 text-[11px] font-semibold"

@@ -561,10 +561,11 @@ export function ContextPreview(props: ContextPreviewProps) {
                 </button>
 
                 {compressPreview && (
-                  <details className="stats-chip">
-                    <summary className="cursor-pointer font-medium text-ink-500">上次压缩预览</summary>
-                    <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-[11px] text-ink-400">{compressPreview}</p>
-                  </details>
+                  <div className="stats-chip flex items-center justify-between">
+                    <span className="text-ink-400">最近生成摘要</span>
+                    <button onClick={() => { setCompressionEditText(compressPreview); setCompressionOpen("preview"); }}
+                      className="text-[11px] text-brand-500 hover:text-brand-600">查看</button>
+                  </div>
                 )}
               </>
             ) : (
@@ -835,18 +836,25 @@ export function ContextPreview(props: ContextPreviewProps) {
                 </div>
 
                 <div className="stats-chip">
-                  <span className="mb-1.5 block text-ink-400">最近 {Math.min(cacheDiagHistory.length, 20)} 次命中趋势</span>
-                  <div className="flex items-end gap-0.5" style={{ height: 32 }}>
-                    {cacheDiagHistory.slice(-20).map((r, i) => {
-                      const hr = (r.usage && typeof (r.usage as Record<string,unknown>).cacheHitRate === "number") ? (r.usage as Record<string,unknown>).cacheHitRate as number : null;
-                      const color = hr === null ? "bg-ink-200" : hr >= 0.7 ? "bg-emerald-500" : hr >= 0.4 ? "bg-amber-400" : "bg-rose-400";
-                      return (
-                        <div key={i} className={"flex-1 rounded-t-sm " + color}
-                          style={{ height: hr !== null ? `${Math.max(4, Math.round(hr * 32))}px` : "4px" }}
-                          title={hr !== null ? `命中率 ${Math.round(hr * 100)}%` : "无数据"}
-                        />
-                      );
-                    })}
+                  <span className="mb-1.5 block text-ink-400">
+                    最近 {Math.min(cacheDiagHistory.length, 20)} 次命中趋势
+                    {cacheDiagHistory.length > 20 ? "（展示最近 20 次）" : ""}
+                  </span>
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex items-end gap-0.5" style={{ height: 32, minWidth: cacheDiagHistory.length > 12 ? `${Math.min(cacheDiagHistory.length, 20) * 8}px` : "auto" }}>
+                      {cacheDiagHistory.slice(-20).map((r, i) => {
+                        const hr = (r.usage && typeof (r.usage as Record<string,unknown>).cacheHitRate === "number") ? (r.usage as Record<string,unknown>).cacheHitRate as number : null;
+                        const color = hr === null ? "bg-ink-200" : hr >= 0.7 ? "bg-emerald-500" : hr >= 0.4 ? "bg-amber-400" : "bg-rose-400";
+                        const barCount = Math.min(cacheDiagHistory.length, 20);
+                        const minW = barCount > 12 ? "4px" : "auto";
+                        return (
+                          <div key={i} className={"flex-1 rounded-t-sm " + color}
+                            style={{ height: hr !== null ? `${Math.max(4, Math.round(hr * 32))}px` : "4px", minWidth: minW }}
+                            title={hr !== null ? `命中率 ${Math.round(hr * 100)}%` : "无数据"}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -1197,7 +1205,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                 setCompressionErrorMsg("重新生成失败，请重试。");
                 setCompressionOpen("error");
               }
-            }} className="neo-button flex-1 px-4 py-2 text-xs font-medium text-brand-600 hover:text-brand-700">
+            }} disabled={compressBusy} className="neo-button flex-1 px-4 py-2 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50">
               重新生成
             </button>
             <button onClick={async () => {
@@ -1210,7 +1218,7 @@ export function ContextPreview(props: ContextPreviewProps) {
               await onSaveSummaryText(trimmed);
               setCompressionOpen("success");
               setTimeout(() => setCompressionOpen(null), 2000);
-            }} className="neo-button-primary flex flex-1 items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold">
+            }} disabled={compressBusy} className="neo-button-primary flex flex-1 items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold disabled:opacity-50">
               应用摘要
             </button>
           </div>

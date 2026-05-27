@@ -416,6 +416,11 @@ export function useChatSession(
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Lightweight in-memory cache for cacheDiagHistory per session
+  const historyCacheRef = useRef(new Map<string, { history: CacheDiagnosticsRecord[]; loadedAt: number }>());
+  const HISTORY_CACHE_TTL = 60_000; // 60 seconds
+  const HISTORY_CACHE_MAX = 10;
+
   const isLocalMode = isGuestOrDemo || !supabase || !userId;
 
   const getApiKey = useCallback((): string | null => {
@@ -840,14 +845,28 @@ export function useChatSession(
         return null;
       });
       const latestDiag = readDiagnosticsFromContextRun(latestContextRun);
-      const recentRuns = await withTimeout(
-        (isLocalMode
-          ? LocalRepo.listRecentContextRuns(id, 20)
-          : Repo.listRecentContextRuns(supabase!, userId!, id, 20)),
-        5000,
-        "context run history load timed out",
-      ).catch(() => [] as ContextRunRow[]);
-      const cacheDiagHistory = extractHistory(recentRuns);
+      // Use cache if available and not expired
+      const cached = historyCacheRef.current.get(id);
+      let cacheDiagHistory: CacheDiagnosticsRecord[];
+      if (cached && (Date.now() - cached.loadedAt) < HISTORY_CACHE_TTL) {
+        cacheDiagHistory = cached.history;
+      } else {
+        const recentRuns = await withTimeout(
+          (isLocalMode
+            ? LocalRepo.listRecentContextRuns(id, 20)
+            : Repo.listRecentContextRuns(supabase!, userId!, id, 20)),
+          5000,
+          "context run history load timed out",
+        ).catch(() => [] as ContextRunRow[]);
+        cacheDiagHistory = extractHistory(recentRuns);
+        if (cacheDiagHistory.length > 0) {
+          historyCacheRef.current.set(id, { history: cacheDiagHistory, loadedAt: Date.now() });
+          if (historyCacheRef.current.size > HISTORY_CACHE_MAX) {
+            const firstKey = historyCacheRef.current.keys().next().value;
+            if (firstKey) historyCacheRef.current.delete(firstKey);
+          }
+        }
+      }
 
       loadedSessionRef.current = id;
       setState((s) => ({
@@ -1590,6 +1609,7 @@ export function useChatSession(
 
     setState((s) => ({ ...s, isStreaming: false, isSending: false }));
     void loadSessions();
+    void setTimeout(() => computeContextWindowEstimate(), 0);
   }, [buildConfig, buildCurrentContext, isDemo, isLocalMode, loadSessions, userId]);
 
   const regenerateLast = useCallback(async () => {
