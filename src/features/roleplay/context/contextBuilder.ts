@@ -462,6 +462,20 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
   };
 }
 
+/** Real-time context window estimate (no API call, local token estimation only) */
+export type ContextWindowEstimate = {
+  estimatedTokens?: number;
+  modelLimit?: number;
+  usageRatio?: number;
+  status: "normal" | "near_limit" | "should_compress" | "unknown";
+  recentMessagesCount?: number;
+  oldMessagesCount?: number;
+  oldMessagesTokens?: number;
+  summaryTokens?: number;
+  canCompress: boolean;
+  reason?: string;
+};
+
 /** Persisted cache diagnostics record from context_runs.components_json */
 export type CacheDiagnosticsRecord = {
   usage?: Record<string, unknown>;

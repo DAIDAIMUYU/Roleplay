@@ -359,6 +359,7 @@ export function ChatRoomPage() {
     onCompressContext: chat.compressContext,
     compressBusy: chat.compressBusy,
     compressPreview: chat.compressPreview,
+    contextWindowEstimate: chat.contextWindowEstimate,
     contextTokenUsed: chat.lastContextOutput?.estimatedTokens,
     contextTokenLimit: chat.lastContextOutput?.budget?.budgetLimit,
     onRefreshBalance: chat.refreshProviderBalance,

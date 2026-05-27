@@ -74,6 +74,7 @@ interface ContextPreviewProps {
   onCompressContext: () => Promise<string | null>;
   compressBusy?: boolean;
   compressPreview?: string | null;
+  contextWindowEstimate?: import("../../context/contextBuilder").ContextWindowEstimate | null;
   contextTokenUsed?: number;
   contextTokenLimit?: number;
   onRefreshBalance: () => Promise<void>;
@@ -153,6 +154,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     onCompressContext,
     compressBusy,
     compressPreview,
+    contextWindowEstimate,
     contextTokenUsed,
     contextTokenLimit,
     onRefreshBalance,
@@ -495,42 +497,47 @@ export function ContextPreview(props: ContextPreviewProps) {
           title="上下文窗口"
           icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />}
           badge={(() => {
-            if (!contextTokenUsed || !contextTokenLimit) return "预览";
-            const pct = Math.round((contextTokenUsed / contextTokenLimit) * 100);
-            return pct >= 70 ? `接近上限 ${pct}%` : pct >= 50 ? `${pct}%` : `正常 ${pct}%`;
+            const est = contextWindowEstimate;
+            if (!est || est.status === "unknown") return "预览";
+            if (est.status === "should_compress") return `建议压缩 ${est.usageRatio ? Math.round(est.usageRatio * 100) + "%" : ""}`;
+            if (est.status === "near_limit") return `接近上限 ${est.usageRatio ? Math.round(est.usageRatio * 100) + "%" : ""}`;
+            return `正常 ${est.usageRatio ? Math.round(est.usageRatio * 100) + "%" : ""}`;
           })()}
           level={2}
         >
           <div className="space-y-2 pb-1 text-xs text-ink-400">
-            {contextTokenUsed && contextTokenLimit ? (
+            {(contextWindowEstimate && contextWindowEstimate.estimatedTokens !== undefined) ? (
               <>
                 <div className="stats-chip flex items-center justify-between">
                   <span>当前用量</span>
-                  <span>{formatToken(contextTokenUsed)} / {formatToken(contextTokenLimit)} tok ({Math.round((contextTokenUsed / contextTokenLimit) * 100)}%)</span>
+                  <span>{formatToken(contextWindowEstimate.estimatedTokens)} / {formatToken(contextWindowEstimate.modelLimit)} tok ({contextWindowEstimate.usageRatio ? Math.round(contextWindowEstimate.usageRatio * 100) : 0}%)</span>
                 </div>
-                {/* Usage bar */}
                 <div className="h-2 w-full overflow-hidden rounded-full bg-surface-200">
-                  <div
-                    className={`h-full rounded-full transition-all ${contextTokenUsed / contextTokenLimit >= 0.7 ? "bg-rose-400" : contextTokenUsed / contextTokenLimit >= 0.5 ? "bg-amber-400" : "bg-emerald-400"}`}
-                    style={{ width: `${Math.min(100, Math.round((contextTokenUsed / contextTokenLimit) * 100))}%` }}
-                  />
+                  <div className={`h-full rounded-full transition-all ${(contextWindowEstimate.usageRatio ?? 0) >= 0.7 ? "bg-rose-400" : (contextWindowEstimate.usageRatio ?? 0) >= 0.5 ? "bg-amber-400" : "bg-emerald-400"}`}
+                    style={{ width: `${Math.min(100, Math.round((contextWindowEstimate.usageRatio ?? 0) * 100))}%` }} />
                 </div>
 
-                {contextTokenUsed / contextTokenLimit >= 0.7 && (
-                  <p className="text-[11px] text-amber-600">上下文窗口接近上限，请求可能失败。建议压缩较早消息为摘要。</p>
+                {contextWindowEstimate.reason && (
+                  <p className={`text-[11px] ${(contextWindowEstimate.usageRatio ?? 0) >= 0.7 ? "text-amber-600" : "text-ink-300"}`}>{contextWindowEstimate.reason}</p>
                 )}
 
-                {/* Compress button */}
+                {contextWindowEstimate.oldMessagesCount !== undefined && (
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    <div className="stats-chip flex items-center justify-between"><span>可压缩</span><span>{contextWindowEstimate.oldMessagesCount} 条 · {formatToken(contextWindowEstimate.oldMessagesTokens)} tok</span></div>
+                    <div className="stats-chip flex items-center justify-between"><span>保留最近</span><span>{contextWindowEstimate.recentMessagesCount ?? 20} 条</span></div>
+                  </div>
+                )}
+
                 <button
                   onClick={async () => {
                     if (compressBusy) return;
+                    if (!contextWindowEstimate.canCompress) return;
                     if (!window.confirm("压缩上下文？\n\n系统会将较早的聊天记录整理成会话摘要。原始消息不会删除。摘要应用后，稳定前缀会变化一次，后续对话成本通常会降低。")) return;
                     const result = await onCompressContext();
                     if (result) {
                       const apply = window.confirm("摘要已生成，是否应用？\n\n点击[确定]将保存并启用新摘要。点击[取消]将丢弃预览。");
                       if (apply && onSaveSummaryText) {
                         await onSaveSummaryText(result);
-                        alert("摘要已应用。稳定前缀已更新，后续连续聊天缓存会逐步恢复。");
                       }
                     }
                   }}
@@ -559,7 +566,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                 )}
               </>
             ) : (
-              <p>发送消息后将显示上下文窗口用量。</p>
+              <p>发送消息后将显示上下文用量估算。</p>
             )}
           </div>
         </ContextSectionCard>

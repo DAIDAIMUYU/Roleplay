@@ -67,6 +67,7 @@ export interface ChatState {
   isGeneratingMemorySuggestions: boolean;
   compressBusy: boolean;
   compressPreview: string | null;
+  contextWindowEstimate: import("../context/contextBuilder").ContextWindowEstimate | null;
   latestProviderUsage: ProviderUsage | null;
   latestCostEstimate: ProviderCostEstimate | null;
   cacheDiag: CacheDiagnostics | null;
@@ -99,6 +100,7 @@ export interface ChatActions {
   clearSummary: () => Promise<void>;
   generateSummary: () => Promise<string | null>;
   compressContext: () => Promise<string | null>;
+  computeContextWindowEstimate: () => void;
   loadMessageRevisions: (messageIndex: number) => Promise<MessageRevisionRow[]>;
   loadOlderMessages: () => Promise<void>;
   generateMemorySuggestions: (source?: { messageIndex?: number }) => Promise<MemorySuggestionDraft[] | null>;
@@ -398,6 +400,7 @@ export function useChatSession(
     isGeneratingMemorySuggestions: false,
     compressBusy: false,
     compressPreview: null,
+    contextWindowEstimate: null,
     latestProviderUsage: null,
     latestCostEstimate: null,
     cacheDiag: null,
@@ -878,6 +881,7 @@ export function useChatSession(
         balanceError: null,
       }));
       void refreshSuggestedMemories(id);
+      void setTimeout(() => computeContextWindowEstimate(), 0);
     } catch (error) {
       loadedSessionRef.current = id;
       setState((s) => ({ ...s, error: String(error), isContextLoading: false, contextPreviewError: "Context preview failed, chat is still available" }));
@@ -1127,6 +1131,45 @@ export function useChatSession(
       return null;
     }
   }, [apiConfigured, buildConfig]);
+
+  const computeContextWindowEstimate = useCallback(() => {
+    const current = stateRef.current;
+    if (!current.activeSessionId || current.messages.length === 0) {
+      setState((s) => ({ ...s, contextWindowEstimate: null }));
+      return;
+    }
+    const msgs = current.messages.filter((m) => m.role !== "system");
+    if (msgs.length === 0) return;
+    const oldMsgs = msgs.slice(0, Math.max(0, msgs.length - 20));
+    const sumText = current.summaryText?.trim() ?? "";
+    const cp = current.activeCharacter
+      ? buildCharacterSystemPrompt(current.activeCharacter, current.activeTemplate?.content)
+      : "";
+    const est = (t: string) => t.length > 0 ? Math.max(1, Math.ceil(t.length / 1.5)) : 0;
+    const charToks = est(cp);
+    const sumToks = est(sumText);
+    const oldToks = est(oldMsgs.map((m) => m.content).join("\n"));
+    const recentToks = est(msgs.slice(-20).map((m) => m.content).join("\n"));
+    const total = charToks + sumToks + recentToks;
+    const limit = current.lastContextOutput?.budget?.budgetLimit ?? 8000;
+    const ratio = limit > 0 ? total / limit : 0;
+    const canCompress = oldMsgs.length >= 3;
+    let status: import("../context/contextBuilder").ContextWindowEstimate["status"] = "unknown";
+    let reason: string | undefined;
+    if (!canCompress && oldMsgs.length > 0) reason = "较早消息不足 3 条，暂无需压缩。";
+    else if (msgs.length <= 20) reason = "会话消息较少，暂无需压缩。";
+    else if (ratio >= 0.7) { status = "should_compress"; reason = "上下文接近上限，建议压缩较早消息。"; }
+    else if (ratio >= 0.5) { status = "near_limit"; }
+    else { status = "normal"; }
+    setState((s) => ({
+      ...s,
+      contextWindowEstimate: {
+        estimatedTokens: total, modelLimit: limit, usageRatio: ratio, status,
+        recentMessagesCount: Math.min(msgs.length, 20), oldMessagesCount: oldMsgs.length,
+        oldMessagesTokens: oldToks, summaryTokens: sumToks, canCompress, reason,
+      },
+    }));
+  }, []);
 
   const generateMemorySuggestions = useCallback(async (source?: { messageIndex?: number }): Promise<MemorySuggestionDraft[] | null> => {
     const current = stateRef.current;
@@ -1909,6 +1952,7 @@ export function useChatSession(
     clearSummary,
     generateSummary,
     compressContext,
+    computeContextWindowEstimate,
     loadMessageRevisions,
     loadOlderMessages,
     generateMemorySuggestions,
