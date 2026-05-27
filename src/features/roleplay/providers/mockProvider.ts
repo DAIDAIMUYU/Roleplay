@@ -4,6 +4,7 @@ import type {
   ChatResult,
   ChatStreamChunk,
   ModelProviderConfig,
+  ProviderUsage,
   ProviderAdapter,
   ProviderType,
   TestResult,
@@ -17,6 +18,13 @@ const MOCK_REPLIES = [
 ];
 
 let replyIndex = 0;
+
+const mockUsageUnavailable: ProviderUsage = {
+  usageAvailable: false,
+  usageUnavailableReason: "本地预览不会返回真实 Provider 用量。",
+  sourceProvider: "mock",
+  rawUsage: null,
+};
 
 function getMockReply(userInput?: string): string {
   const base = MOCK_REPLIES[replyIndex % MOCK_REPLIES.length];
@@ -40,8 +48,7 @@ export const mockProvider: ProviderAdapter = {
     const lastUser = [...messages].reverse().find((message) => message.role === "user");
     return {
       content: getMockReply(lastUser?.content),
-      inputTokens: 0,
-      outputTokens: 0,
+      usage: mockUsageUnavailable,
     };
   },
 
@@ -63,7 +70,7 @@ export const mockProvider: ProviderAdapter = {
       yield { content: chars[index], done: false };
     }
 
-    yield { content: "", done: true, inputTokens: 0, outputTokens: 0 };
+    yield { content: "", done: true, usage: mockUsageUnavailable };
   },
 
   normalizeError(_err: unknown, provider: string): AppProblem {

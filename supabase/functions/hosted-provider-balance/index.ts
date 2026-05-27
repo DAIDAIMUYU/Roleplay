@@ -4,7 +4,7 @@ import { requireUser } from "../_shared/auth.ts";
 import { decryptApiKey } from "../_shared/crypto.ts";
 import { getCredentialForUser } from "../_shared/credentials.ts";
 import { errorResponse, jsonResponse } from "../_shared/json.ts";
-import { mapProviderError, normalizeBaseUrl, providerChat } from "../_shared/provider.ts";
+import { mapProviderError, providerFetchBalance } from "../_shared/provider.ts";
 
 serve(async (request) => {
   const preflight = handleCorsPreflight(request);
@@ -25,39 +25,23 @@ serve(async (request) => {
   }
 
   const credentialId =
-    typeof body.credential_id === "string"
-      ? body.credential_id
-      : typeof body.credentialId === "string"
-        ? body.credentialId
+    typeof body.credentialId === "string"
+      ? body.credentialId
+      : typeof body.credential_id === "string"
+        ? body.credential_id
         : "";
-  const model = typeof body.model === "string" ? body.model.trim() : "";
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  const temperature = typeof body.temperature === "number" ? body.temperature : undefined;
-  const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : undefined;
 
   if (!credentialId) {
-    return errorResponse(request, 400, "缺少 credential_id。");
-  }
-
-  if (!model) {
-    return errorResponse(request, 400, "缺少 model。");
-  }
-
-  if (!messages.length) {
-    return errorResponse(request, 400, "messages 不能为空。");
+    return errorResponse(request, 400, "缺少 credentialId。");
   }
 
   try {
     const { credential, secret } = await getCredentialForUser(auth.serviceClient, auth.user, credentialId);
     const apiKey = await decryptApiKey(secret.encrypted_api_key, secret.encryption_iv);
-    const result = await providerChat({
+    const result = await providerFetchBalance({
       providerType: credential.provider_type,
-      baseUrl: normalizeBaseUrl(credential.provider_type, credential.base_url),
+      baseUrl: credential.base_url ?? "",
       apiKey,
-      model,
-      messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
-      temperature,
-      maxTokens,
     });
 
     await auth.serviceClient

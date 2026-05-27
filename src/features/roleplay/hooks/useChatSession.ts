@@ -1,16 +1,26 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../auth/supabaseClient";
-import type { ApiKeyStorageMode, ChatMessage, ModelProviderConfig, ProviderType } from "../providers/provider.types";
+import type {
+  ApiKeyStorageMode,
+  ChatMessage,
+  ModelProviderConfig,
+  ProviderBalanceSnapshot,
+  ProviderCostEstimate,
+  ProviderType,
+  ProviderUsage,
+} from "../providers/provider.types";
 import { DEFAULT_PROVIDER_CONFIG } from "../providers/provider.types";
 import { buildConfigFromStorage, sendProviderStreamRequest } from "../providers/providerGateway";
 import { loadApiKey } from "../storage/apiKeyStorage";
 import * as Repo from "../repositories/roleplayRepository";
 import * as LocalRepo from "../repositories/localRoleplayRepository";
 import * as LocalMirror from "../repositories/localMirror";
-import type { CharacterRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
+import type { CharacterRow, ContextRunRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
 import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
 import { getPresetName } from "../providers/providerPresets";
+import { estimateDeepSeekCost } from "../providers/pricing/deepseekPricing";
+import { fetchHostedProviderBalance } from "../services/hostedCredentialsService";
 
 export interface SessionLike {
   id: string;
@@ -55,6 +65,11 @@ export interface ChatState {
   isLoadingOlderMessages: boolean;
   suggestedMemories: MemoryRow[];
   isGeneratingMemorySuggestions: boolean;
+  latestProviderUsage: ProviderUsage | null;
+  latestCostEstimate: ProviderCostEstimate | null;
+  providerBalance: ProviderBalanceSnapshot | null;
+  isBalanceLoading: boolean;
+  balanceError: string | null;
 }
 
 export interface ChatActions {
@@ -84,6 +99,7 @@ export interface ChatActions {
   generateMemorySuggestions: (source?: { messageIndex?: number }) => Promise<MemorySuggestionDraft[] | null>;
   saveMemorySuggestions: (drafts: MemorySuggestionDraft[], status: "active" | "suggested") => Promise<void>;
   updateSuggestedMemoryStatus: (memoryId: string, status: "active" | "disabled" | "deleted") => Promise<void>;
+  refreshProviderBalance: () => Promise<void>;
   isDemo: boolean;
   apiConfigured: boolean;
   providerLabel: string;
@@ -100,6 +116,53 @@ export interface MemorySuggestionDraft {
   salience: number;
   reason: string;
   sourceMessageId: string | null;
+}
+
+interface ContextRunComponentsPayload {
+  usage?: ProviderUsage | null;
+  costEstimate?: ProviderCostEstimate | null;
+}
+
+function isDeepSeekProvider(provider: ProviderType): boolean {
+  return provider === "deepseek";
+}
+
+function buildUsageUnavailable(reason: string, provider: ProviderType): ProviderUsage {
+  return {
+    usageAvailable: false,
+    usageUnavailableReason: reason,
+    rawUsage: null,
+    sourceProvider: provider,
+  };
+}
+
+function toFriendlyBalanceError(
+  error: unknown,
+  storageMode: ApiKeyStorageMode,
+): string {
+  if (error instanceof Error) {
+    if (/failed to fetch/i.test(error.message)) {
+      return storageMode === "hosted_encrypted"
+        ? "无法连接托管余额服务，请确认 hosted-provider-balance 已部署且可访问。"
+        : "浏览器无法直接获取 DeepSeek 余额，请检查网络或稍后重试。";
+    }
+    return error.message;
+  }
+  return "余额查询失败，请稍后重试。";
+}
+
+function readLatestUsageFromContextRun(contextRun: ContextRunRow | null | undefined): {
+  usage: ProviderUsage | null;
+  costEstimate: ProviderCostEstimate | null;
+} {
+  if (!contextRun) return { usage: null, costEstimate: null };
+
+  const componentsArray = Array.isArray(contextRun.components_json) ? contextRun.components_json : [];
+  const merged = componentsArray.find((item) => item && typeof item === "object") as ContextRunComponentsPayload | undefined;
+  return {
+    usage: merged?.usage ?? null,
+    costEstimate: merged?.costEstimate ?? null,
+  };
 }
 
 interface BuiltContext {
@@ -317,6 +380,11 @@ export function useChatSession(
     isLoadingOlderMessages: false,
     suggestedMemories: [],
     isGeneratingMemorySuggestions: false,
+    latestProviderUsage: null,
+    latestCostEstimate: null,
+    providerBalance: null,
+    isBalanceLoading: false,
+    balanceError: null,
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -347,6 +415,74 @@ export function useChatSession(
       hostedCredentialId ?? null,
     );
   }, [getApiKey, hostedBaseURL, hostedCredentialId, isDemo, storageMode, storedProvider]);
+
+  const refreshProviderBalance = useCallback(async () => {
+    if (!isDeepSeekProvider(storedProvider)) {
+      setState((s) => ({
+        ...s,
+        providerBalance: null,
+        isBalanceLoading: false,
+        balanceError: "当前阶段仅支持 DeepSeek 余额查询。",
+      }));
+      return;
+    }
+
+    setState((s) => ({ ...s, isBalanceLoading: true, balanceError: null }));
+    try {
+      let snapshot: ProviderBalanceSnapshot;
+      if (storageMode === "hosted_encrypted") {
+        if (!hostedCredentialId) throw new Error("请先在设置中心选择托管 API 凭据。");
+        snapshot = await fetchHostedProviderBalance(hostedCredentialId);
+      } else {
+        const apiKey = getApiKey();
+        if (!apiKey) throw new Error("请先配置 DeepSeek API Key。");
+        const response = await fetch("https://api.deepseek.com/user/balance", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+          },
+        });
+        if (!response.ok) {
+          const detail = response.status === 401
+            ? "DeepSeek API Key 无效或已失效。"
+            : response.status === 429
+              ? "DeepSeek 余额查询过于频繁，请稍后再试。"
+              : response.status >= 500
+                ? "DeepSeek 服务暂时不可用，请稍后重试。"
+                : "DeepSeek 余额查询失败，请检查当前配置。";
+          throw new Error(detail);
+        }
+        const payload = await response.json().catch(() => ({}));
+        snapshot = {
+          provider: "deepseek",
+          isAvailable: Boolean((payload as { is_available?: unknown }).is_available),
+          balances: Array.isArray((payload as { balance_infos?: unknown[] }).balance_infos)
+            ? ((payload as { balance_infos: Array<Record<string, unknown>> }).balance_infos).map((item) => ({
+                currency: String(item.currency ?? "USD"),
+                totalBalance: String(item.total_balance ?? "0"),
+                grantedBalance: String(item.granted_balance ?? "0"),
+                toppedUpBalance: String(item.topped_up_balance ?? "0"),
+              }))
+            : [],
+          fetchedAt: new Date().toISOString(),
+        };
+      }
+
+      setState((s) => ({
+        ...s,
+        providerBalance: snapshot,
+        isBalanceLoading: false,
+        balanceError: null,
+      }));
+    } catch (error) {
+      setState((s) => ({
+        ...s,
+        isBalanceLoading: false,
+        balanceError: toFriendlyBalanceError(error, storageMode),
+      }));
+    }
+  }, [getApiKey, hostedCredentialId, storageMode, storedProvider]);
 
   useEffect(() => {
     setState((current) => {
@@ -448,6 +584,11 @@ export function useChatSession(
         editedIndices: activeSessionId ? s.editedIndices : new Set(),
         hasMoreMessages: activeSessionId ? s.hasMoreMessages : false,
         suggestedMemories: activeSessionId ? s.suggestedMemories : [],
+        latestProviderUsage: activeSessionId ? s.latestProviderUsage : null,
+        latestCostEstimate: activeSessionId ? s.latestCostEstimate : null,
+        providerBalance: activeSessionId ? s.providerBalance : null,
+        isBalanceLoading: false,
+        balanceError: activeSessionId ? s.balanceError : null,
       };
     });
   }, [isLocalMode, userId]);
@@ -597,6 +738,11 @@ export function useChatSession(
         hasMoreMessages: false,
         isLoadingOlderMessages: false,
         suggestedMemories: [],
+        latestProviderUsage: null,
+        latestCostEstimate: null,
+        providerBalance: null,
+        isBalanceLoading: false,
+        balanceError: null,
       }));
     } catch (error) {
       setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
@@ -659,6 +805,17 @@ export function useChatSession(
         return new Map<string, number>();
       });
       const metadata = buildIndexedMessageMetadata(page.rows, revisionCounts);
+      const latestContextRun = await withTimeout(
+        (isLocalMode
+          ? LocalRepo.listContextRuns(id)
+          : Repo.listContextRuns(supabase!, userId!, id)).then((runs) => runs[0] ?? null),
+        5000,
+        "context run load timed out",
+      ).catch((error) => {
+        console.warn("[Chat] context run load failed:", error);
+        return null;
+      });
+      const latestUsagePayload = readLatestUsageFromContextRun(latestContextRun);
 
       loadedSessionRef.current = id;
       setState((s) => ({
@@ -684,6 +841,11 @@ export function useChatSession(
         editedIndices: metadata.editedIndices,
         hasMoreMessages: page.hasMore,
         isLoadingOlderMessages: false,
+        latestProviderUsage: latestUsagePayload.usage,
+        latestCostEstimate: latestUsagePayload.costEstimate,
+        providerBalance: null,
+        isBalanceLoading: false,
+        balanceError: null,
       }));
       void refreshSuggestedMemories(id);
     } catch (error) {
@@ -734,6 +896,11 @@ export function useChatSession(
           hasMoreMessages: deletingActive ? false : s.hasMoreMessages,
           isLoadingOlderMessages: false,
           suggestedMemories: deletingActive ? [] : s.suggestedMemories,
+          latestProviderUsage: deletingActive ? null : s.latestProviderUsage,
+          latestCostEstimate: deletingActive ? null : s.latestCostEstimate,
+          providerBalance: deletingActive ? null : s.providerBalance,
+          isBalanceLoading: false,
+          balanceError: deletingActive ? null : s.balanceError,
         };
       });
     } catch (error) {
@@ -1063,9 +1230,13 @@ export function useChatSession(
     const controller = new AbortController();
     abortRef.current = controller;
     let aiContent = "";
+    let latestUsage: ProviderUsage | null = null;
     try {
       for await (const chunk of sendProviderStreamRequest(isDemo, buildConfig(), providerMessages, controller.signal)) {
         if (controller.signal.aborted) break;
+        if (chunk.usage) {
+          latestUsage = chunk.usage;
+        }
         if (!chunk.content) continue;
         aiContent += chunk.content;
         setState((s) => {
@@ -1084,6 +1255,25 @@ export function useChatSession(
     } finally {
       abortRef.current = null;
     }
+
+    const usageForDisplay =
+      latestUsage ??
+      (isDemo
+        ? buildUsageUnavailable("本地预览不会返回真实 Provider 用量。", "mock")
+        : buildUsageUnavailable(
+            storageMode === "hosted_encrypted"
+              ? "托管聊天服务未返回本次用量，请确认 hosted-provider-chat 已部署到最新版本。"
+              : "当前 Provider 未返回本次用量。",
+            storedProvider,
+          ));
+    const costEstimate = isDeepSeekProvider(storedProvider)
+      ? estimateDeepSeekCost(usageForDisplay, stateRef.current.model)
+      : null;
+    setState((s) => ({
+      ...s,
+      latestProviderUsage: usageForDisplay,
+      latestCostEstimate: costEstimate,
+    }));
 
     if (stateRef.current.activeSessionId) {
       setState((s) => ({ ...s, saveStatus: "saving" }));
@@ -1168,6 +1358,11 @@ export function useChatSession(
                 token_budget: contextOutput.budget.budgetLimit,
                 estimated_tokens: contextOutput.estimatedTokens,
                 debug_enabled: false,
+                input_tokens: usageForDisplay.inputTokens ?? null,
+                output_tokens: usageForDisplay.outputTokens ?? null,
+                cache_hit_tokens: usageForDisplay.cacheHitInputTokens ?? null,
+                cost_usd: costEstimate?.totalCost ?? null,
+                components_json: [{ usage: usageForDisplay, costEstimate }],
               })
             : Repo.saveContextRun(supabase!, userId!, {
             session_id: sessionId,
@@ -1185,6 +1380,11 @@ export function useChatSession(
             token_budget: contextOutput.budget.budgetLimit,
             estimated_tokens: contextOutput.estimatedTokens,
             debug_enabled: false,
+            input_tokens: usageForDisplay.inputTokens ?? null,
+            output_tokens: usageForDisplay.outputTokens ?? null,
+            cache_hit_tokens: usageForDisplay.cacheHitInputTokens ?? null,
+            cost_usd: costEstimate?.totalCost ?? null,
+            components_json: [{ usage: usageForDisplay, costEstimate }],
           });
           crPromise.then((cr) => {
             if (!isLocalMode && cr) LocalMirror.mirrorContextRun(cr);
@@ -1592,6 +1792,7 @@ export function useChatSession(
     generateMemorySuggestions,
     saveMemorySuggestions,
     updateSuggestedMemoryStatus,
+    refreshProviderBalance,
     isDemo,
     apiConfigured,
     providerLabel,

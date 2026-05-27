@@ -1,5 +1,12 @@
 import { supabase } from "../../auth/supabaseClient";
-import type { AppProblem, ChatMessage, ChatResult, ProviderType, TestResult } from "../providers";
+import type {
+  AppProblem,
+  ChatMessage,
+  ChatResult,
+  ProviderBalanceSnapshot,
+  ProviderType,
+  TestResult,
+} from "../providers";
 import { translateError } from "../providers";
 import type { ProviderCredentialRow } from "../types/database";
 
@@ -52,14 +59,24 @@ async function callFunction<T>(
   if (!supabase) throw new Error("Supabase 未配置。");
   const token = await getAccessToken();
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const response = await fetch(`${baseUrl}/functions/v1/${functionName}`, {
-    method: options?.method ?? "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: options?.method === "GET" ? undefined : JSON.stringify(options?.body ?? {}),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/functions/v1/${functionName}`, {
+      method: options?.method ?? "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: options?.method === "GET" ? undefined : JSON.stringify(options?.body ?? {}),
+    });
+  } catch {
+    const detail = functionName === "hosted-provider-balance"
+      ? "无法连接托管余额服务，请确认 hosted-provider-balance 已部署且网络可访问。"
+      : functionName === "hosted-provider-chat"
+        ? "无法连接托管聊天服务，请确认 hosted-provider-chat 已部署且网络可访问。"
+        : "无法连接托管函数服务，请检查 Supabase Functions 是否已部署。";
+    throw translateError({ status: 503, message: detail }, "hosted_encrypted");
+  }
 
   const text = await response.text().catch(() => "");
   let payload: unknown = null;
@@ -188,6 +205,13 @@ export async function sendHostedProviderChat(input: HostedProviderChatInput): Pr
     body: input,
   });
   return payload;
+}
+
+export async function fetchHostedProviderBalance(credentialId: string): Promise<ProviderBalanceSnapshot> {
+  return callFunction<ProviderBalanceSnapshot>("hosted-provider-balance", {
+    method: "POST",
+    body: { credentialId },
+  });
 }
 
 export function selectionFromCredential(credential: ProviderCredentialRow): HostedCredentialSelection {

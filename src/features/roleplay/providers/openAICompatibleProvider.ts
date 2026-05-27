@@ -9,6 +9,7 @@ import type {
   AppProblem,
 } from "./provider.types";
 import { translateError } from "./providerErrors";
+import { normalizeProviderUsage } from "./usage";
 
 export const openAICompatibleProvider: ProviderAdapter = {
   id: "openai_compatible" as ProviderType,
@@ -77,8 +78,7 @@ export const openAICompatibleProvider: ProviderAdapter = {
     const choice = data.choices?.[0];
     return {
       content: choice?.message?.content ?? "",
-      inputTokens: data.usage?.prompt_tokens,
-      outputTokens: data.usage?.completion_tokens,
+      usage: normalizeProviderUsage("openai_compatible", data.usage),
     };
   },
 
@@ -114,8 +114,7 @@ export const openAICompatibleProvider: ProviderAdapter = {
 
     const decoder = new TextDecoder();
     let buffer = "";
-    let totalOutput = 0;
-    let totalInput = 0;
+    let finalUsage = normalizeProviderUsage("openai_compatible", null);
 
     try {
       while (true) {
@@ -136,17 +135,18 @@ export const openAICompatibleProvider: ProviderAdapter = {
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
           const data = trimmed.slice(6);
           if (data === "[DONE]") {
-            yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
+            yield { content: "", done: true, usage: finalUsage };
             return;
           }
           try {
             const json = JSON.parse(data);
+            if (json.usage) {
+              finalUsage = normalizeProviderUsage("openai_compatible", json.usage);
+            }
             const delta = json.choices?.[0]?.delta?.content;
             if (delta) {
-              totalOutput += delta.length;
               yield { content: delta, done: false };
             }
-            if (json.usage?.prompt_tokens) totalInput = json.usage.prompt_tokens;
           } catch {
             // skip malformed SSE
           }
@@ -156,7 +156,7 @@ export const openAICompatibleProvider: ProviderAdapter = {
       reader.releaseLock();
     }
 
-    yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
+    yield { content: "", done: true, usage: finalUsage };
   },
 
   normalizeError(err: unknown, provider: string): AppProblem {

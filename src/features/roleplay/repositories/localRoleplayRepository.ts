@@ -812,6 +812,12 @@ export async function saveContextRun(input: {
   token_budget?: number | null;
   estimated_tokens?: number | null;
   debug_enabled?: boolean;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_hit_tokens?: number | null;
+  cost_usd?: number | null;
+  components_json?: unknown;
+  dropped_json?: unknown;
 }): Promise<ContextRunRow> {
   const row: ContextRunRow = {
     id: newId(),
@@ -822,13 +828,13 @@ export async function saveContextRun(input: {
     trigger_message_id: input.trigger_message_id ?? null,
     provider: input.provider ?? null,
     model: input.model ?? null,
-    input_tokens: null,
-    output_tokens: null,
-    cache_hit_tokens: null,
+    input_tokens: input.input_tokens ?? null,
+    output_tokens: input.output_tokens ?? null,
+    cache_hit_tokens: input.cache_hit_tokens ?? null,
     latency_ms: null,
-    cost_usd: null,
-    components_json: [],
-    dropped_json: [],
+    cost_usd: input.cost_usd ?? null,
+    components_json: Array.isArray(input.components_json) ? input.components_json : input.components_json ? [input.components_json] : [],
+    dropped_json: Array.isArray(input.dropped_json) ? input.dropped_json : input.dropped_json ? [input.dropped_json] : [],
     system_prompt: input.system_prompt ?? null,
     provider_messages_json: input.provider_messages_json ?? null,
     worldbook_hits_json: input.worldbook_hits_json ?? null,
@@ -841,4 +847,11 @@ export async function saveContextRun(input: {
     created_at: nowIso(),
   };
   return putRow("context_runs", row);
+}
+
+export async function listContextRuns(sessionId?: string): Promise<ContextRunRow[]> {
+  const rows = await getAll<ContextRunRow>("context_runs");
+  return rows
+    .filter((row) => !sessionId || row.session_id === sessionId)
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
 }

@@ -9,6 +9,7 @@ import type {
   AppProblem,
 } from "./provider.types";
 import { translateError } from "./providerErrors";
+import { normalizeProviderUsage } from "./usage";
 
 export const deepseekProvider: ProviderAdapter = {
   id: "deepseek" as ProviderType,
@@ -64,8 +65,7 @@ export const deepseekProvider: ProviderAdapter = {
     const choice = data.choices?.[0];
     return {
       content: choice?.message?.content ?? "",
-      inputTokens: data.usage?.prompt_tokens,
-      outputTokens: data.usage?.completion_tokens,
+      usage: normalizeProviderUsage("deepseek", data.usage),
     };
   },
 
@@ -85,6 +85,7 @@ export const deepseekProvider: ProviderAdapter = {
         temperature: config.temperature ?? 0.8,
         max_tokens: config.maxTokens ?? 1200,
         stream: true,
+        stream_options: { include_usage: true },
       }),
       signal,
     });
@@ -99,8 +100,7 @@ export const deepseekProvider: ProviderAdapter = {
 
     const decoder = new TextDecoder();
     let buffer = "";
-    let totalInput = 0;
-    let totalOutput = 0;
+    let finalUsage = normalizeProviderUsage("deepseek", null);
 
     try {
       while (true) {
@@ -122,17 +122,18 @@ export const deepseekProvider: ProviderAdapter = {
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
           const data = trimmed.slice(6);
           if (data === "[DONE]") {
-            yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
+            yield { content: "", done: true, usage: finalUsage };
             return;
           }
           try {
             const json = JSON.parse(data);
+            if (json.usage) {
+              finalUsage = normalizeProviderUsage("deepseek", json.usage);
+            }
             const delta = json.choices?.[0]?.delta?.content;
             if (delta) {
-              totalOutput++;
               yield { content: delta, done: false };
             }
-            if (json.usage?.prompt_tokens) totalInput = json.usage.prompt_tokens;
           } catch {
             // skip malformed SSE lines
           }
@@ -142,7 +143,16 @@ export const deepseekProvider: ProviderAdapter = {
       reader.releaseLock();
     }
 
-    yield { content: "", done: true, inputTokens: totalInput, outputTokens: totalOutput };
+    yield {
+      content: "",
+      done: true,
+      usage: finalUsage.usageAvailable
+        ? finalUsage
+        : {
+            ...finalUsage,
+            usageUnavailableReason: "本次流式响应未返回完整用量，费用可能无法估算。",
+          },
+    };
   },
 
   normalizeError(err: unknown, provider: string): AppProblem {

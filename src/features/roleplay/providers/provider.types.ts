@@ -92,17 +92,57 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface ChatResult {
-  content: string;
+export interface ProviderUsage {
   inputTokens?: number;
   outputTokens?: number;
+  totalTokens?: number;
+  cacheHitInputTokens?: number;
+  cacheMissInputTokens?: number;
+  cacheHitRate?: number;
+  reasoningTokens?: number;
+  rawUsage?: unknown;
+  sourceProvider?: string;
+  usageAvailable: boolean;
+  usageUnavailableReason?: string;
+}
+
+export interface ProviderCostEstimate {
+  provider: "deepseek";
+  currency: "USD";
+  cacheHitInputCost?: number;
+  cacheMissInputCost?: number;
+  inputCost?: number;
+  outputCost?: number;
+  totalCost?: number;
+  pricingVersion: string;
+  pricingUpdatedAt: string;
+  isEstimated: true;
+  estimateWarning?: string;
+}
+
+export interface ProviderBalanceInfo {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+export interface ProviderBalanceSnapshot {
+  provider: "deepseek";
+  isAvailable: boolean;
+  balances: ProviderBalanceInfo[];
+  fetchedAt: string;
+}
+
+export interface ChatResult {
+  content: string;
+  usage?: ProviderUsage;
 }
 
 export interface ChatStreamChunk {
   content: string;
   done: boolean;
-  inputTokens?: number;
-  outputTokens?: number;
+  usage?: ProviderUsage;
 }
 
 export interface ProviderAdapter {

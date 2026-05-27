@@ -5,6 +5,20 @@ export interface HostedProviderMessage {
   content: string;
 }
 
+export interface HostedProviderUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cacheHitInputTokens?: number;
+  cacheMissInputTokens?: number;
+  cacheHitRate?: number;
+  reasoningTokens?: number;
+  rawUsage?: unknown;
+  sourceProvider?: string;
+  usageAvailable: boolean;
+  usageUnavailableReason?: string;
+}
+
 export interface ProviderCredentialRecord {
   id: string;
   user_id: string;
@@ -100,7 +114,7 @@ export async function providerChat(config: {
   messages: HostedProviderMessage[];
   temperature?: number;
   maxTokens?: number;
-}): Promise<{ content: string; inputTokens?: number; outputTokens?: number }> {
+}): Promise<{ content: string; usage: HostedProviderUsage }> {
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -123,9 +137,109 @@ export async function providerChat(config: {
   const payload = await response.json().catch(() => ({}));
   return {
     content: payload?.choices?.[0]?.message?.content ?? "",
-    inputTokens: payload?.usage?.prompt_tokens,
-    outputTokens: payload?.usage?.completion_tokens,
+    usage: normalizeHostedProviderUsage(config.providerType, payload?.usage),
   };
+}
+
+export async function providerFetchBalance(config: {
+  providerType: HostedProviderType;
+  baseUrl: string;
+  apiKey: string;
+}): Promise<{
+  provider: "deepseek";
+  isAvailable: boolean;
+  balances: Array<{
+    currency: string;
+    totalBalance: string;
+    grantedBalance: string;
+    toppedUpBalance: string;
+  }>;
+  fetchedAt: string;
+}> {
+  if (config.providerType !== "deepseek") {
+    throw new ProviderHttpError(400, "当前阶段仅支持 DeepSeek 余额查询。");
+  }
+
+  const response = await fetch("https://api.deepseek.com/user/balance", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new ProviderHttpError(response.status, "余额请求失败");
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return {
+    provider: "deepseek",
+    isAvailable: Boolean(payload?.is_available),
+    balances: Array.isArray(payload?.balance_infos)
+      ? payload.balance_infos.map((item: Record<string, unknown>) => ({
+          currency: String(item?.currency ?? "USD"),
+          totalBalance: String(item?.total_balance ?? "0"),
+          grantedBalance: String(item?.granted_balance ?? "0"),
+          toppedUpBalance: String(item?.topped_up_balance ?? "0"),
+        }))
+      : [],
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeHostedProviderUsage(
+  provider: HostedProviderType,
+  rawUsage: unknown,
+): HostedProviderUsage {
+  const usage = rawUsage && typeof rawUsage === "object" ? (rawUsage as Record<string, unknown>) : null;
+  if (!usage) {
+    return {
+      usageAvailable: false,
+      usageUnavailableReason: "当前 Provider 未返回本次用量。",
+      rawUsage: null,
+      sourceProvider: provider,
+    };
+  }
+
+  const inputTokens = toNumber(usage.prompt_tokens);
+  const outputTokens = toNumber(usage.completion_tokens);
+  const totalTokens = toNumber(usage.total_tokens);
+  const cacheHitInputTokens = provider === "deepseek" ? toNumber(usage.prompt_cache_hit_tokens) : undefined;
+  const cacheMissInputTokens = provider === "deepseek" ? toNumber(usage.prompt_cache_miss_tokens) : undefined;
+  const reasoningTokens =
+    provider === "deepseek" &&
+    usage.completion_tokens_details &&
+    typeof usage.completion_tokens_details === "object"
+      ? toNumber((usage.completion_tokens_details as Record<string, unknown>).reasoning_tokens)
+      : undefined;
+
+  const cacheTotal =
+    (cacheHitInputTokens ?? 0) + (cacheMissInputTokens ?? 0) > 0
+      ? (cacheHitInputTokens ?? 0) + (cacheMissInputTokens ?? 0)
+      : undefined;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cacheHitInputTokens,
+    cacheMissInputTokens,
+    cacheHitRate: cacheTotal ? (cacheHitInputTokens ?? 0) / cacheTotal : undefined,
+    reasoningTokens,
+    rawUsage: usage,
+    sourceProvider: provider,
+    usageAvailable: [inputTokens, outputTokens, totalTokens, cacheHitInputTokens, cacheMissInputTokens, reasoningTokens].some(
+      (value) => typeof value === "number",
+    ),
+    usageUnavailableReason: [inputTokens, outputTokens, totalTokens].every((value) => typeof value !== "number")
+      ? "当前 Provider 未返回本次用量。"
+      : undefined,
+  };
+}
+
+function toNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 export class ProviderHttpError extends Error {

@@ -10,6 +10,10 @@ export type {
   ChatMessage,
   ChatResult,
   ChatStreamChunk,
+  ProviderUsage,
+  ProviderCostEstimate,
+  ProviderBalanceInfo,
+  ProviderBalanceSnapshot,
 } from "./provider.types";
 
 export {

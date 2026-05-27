@@ -1142,6 +1142,12 @@ export interface SaveContextRunInput {
   token_budget?: number | null;
   estimated_tokens?: number | null;
   debug_enabled?: boolean;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_hit_tokens?: number | null;
+  cost_usd?: number | null;
+  components_json?: unknown;
+  dropped_json?: unknown;
 }
 
 export async function saveContextRun(
@@ -1168,8 +1174,12 @@ export async function saveContextRun(
       token_budget: input.token_budget ?? null,
       estimated_tokens: input.estimated_tokens ?? null,
       debug_enabled: input.debug_enabled ?? false,
-      components_json: [],
-      dropped_json: [],
+      input_tokens: input.input_tokens ?? null,
+      output_tokens: input.output_tokens ?? null,
+      cache_hit_tokens: input.cache_hit_tokens ?? null,
+      cost_usd: input.cost_usd ?? null,
+      components_json: input.components_json ?? [],
+      dropped_json: input.dropped_json ?? [],
     })
     .select()
     .single();

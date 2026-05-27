@@ -174,17 +174,23 @@ export function sendProviderStreamRequest(
         max_tokens: config.maxTokens,
         stream: false,
       });
+      const hostedUsage =
+        result.usage ??
+        {
+          usageAvailable: false,
+          usageUnavailableReason: "托管聊天服务未返回本次用量，请确认 hosted-provider-chat 已部署到最新版本。",
+          rawUsage: null,
+          sourceProvider: config.provider,
+        };
       yield {
         content: result.content,
         done: false,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
+        usage: hostedUsage,
       };
       yield {
         content: "",
         done: true,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
+        usage: hostedUsage,
       };
     })();
   }

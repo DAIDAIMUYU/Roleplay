@@ -58,7 +58,7 @@ function ConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={busy ? undefined : onClose} />
-      <div className="relative mx-4 w-full max-w-sm rounded-2xl bg-white p-5 shadow-modal">
+      <div className="neo-panel relative mx-4 w-full max-w-sm rounded-[32px] p-5">
         <h3 className="mb-2 text-sm font-semibold text-ink-700">{title}</h3>
         <p className="text-xs leading-relaxed text-ink-500">{message}</p>
         {detail ? <p className="mt-2 text-xs text-ink-400">{detail}</p> : null}
@@ -198,7 +198,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
     Object.keys(localCounts).every((k) => localCounts[k as SyncEntityType] === cloudCounts[k as SyncEntityType]);
 
   return (
-    <div className="card space-y-4">
+    <div className="neo-panel space-y-4 p-5">
       <div className="flex items-center gap-2">
         <Cloud className="h-5 w-5 text-brand-500" />
         <h3 className="text-sm font-semibold text-ink-700">数据同步中心</h3>
@@ -206,7 +206,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
 
       {/* Status overview */}
       <div className="grid gap-2 md:grid-cols-2">
-        <div className="rounded-card border border-surface-100 bg-surface-50 px-3 py-3">
+        <div className="neo-panel-soft rounded-[24px] px-3 py-3">
           <div className="flex items-center gap-2">
             <HardDrive className="h-4 w-4 text-ink-400" />
             <p className="text-xs font-medium text-ink-500">本地数据</p>
@@ -227,7 +227,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
           ) : null}
         </div>
 
-        <div className="rounded-card border border-surface-100 bg-surface-50 px-3 py-3">
+        <div className="neo-panel-soft rounded-[24px] px-3 py-3">
           <div className="flex items-center gap-2">
             <Cloud className="h-4 w-4 text-ink-400" />
             <p className="text-xs font-medium text-ink-500">云端数据</p>
@@ -252,7 +252,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
       </div>
 
       {/* Sync status */}
-      <div className="rounded-card border border-surface-100 bg-surface-50 px-3 py-2">
+      <div className="neo-panel-soft rounded-[24px] px-3 py-2.5">
         <div className="flex items-center gap-2">
           {isConsistent ? (
             <Check className="h-4 w-4 text-emerald-500" />
@@ -318,7 +318,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
 
       {/* Progress */}
       {syncing ? (
-        <div className="rounded-card border border-brand-100 bg-brand-50/30 px-3 py-2">
+        <div className="neo-panel-soft rounded-[24px] border border-brand-100 bg-brand-50/30 px-3 py-2">
           <p className="text-xs text-brand-700">
             <RefreshCw className="mr-1 inline h-3 w-3 animate-spin" />
             {syncProgress || "同步中..."}
@@ -328,7 +328,7 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
 
       {/* Result */}
       {syncResult ? (
-        <div className={`rounded-card border px-4 py-3 ${syncResult.failed > 0 || syncResult.conflicts > 0 ? "border-amber-100 bg-amber-light/20" : "border-emerald-100 bg-emerald-light/20"}`}>
+        <div className={`rounded-[24px] border px-4 py-3 shadow-[0_12px_34px_rgba(148,163,184,0.10)] ${syncResult.failed > 0 || syncResult.conflicts > 0 ? "border-amber-100 bg-amber-light/20" : "border-emerald-100 bg-emerald-light/20"}`}>
           <h4 className="mb-2 text-sm font-medium text-ink-700">同步结果</h4>
           <div className="grid grid-cols-2 gap-1 text-xs md:grid-cols-4">
             <span className="text-ink-500">新增：{syncResult.created}</span>
@@ -352,13 +352,13 @@ export function DataSyncPanel({ userId, isLoggedIn }: DataSyncPanelProps) {
 
       {/* Error */}
       {error ? (
-        <div className="rounded-card border border-rose-100 bg-rose-light/30 px-3 py-2 text-xs text-rose-600">
+        <div className="rounded-[24px] border border-rose-100 bg-rose-light/30 px-3 py-2 text-xs text-rose-600 shadow-[0_10px_30px_rgba(244,63,94,0.08)]">
           {error}
         </div>
       ) : null}
 
       {/* Safety notice */}
-      <div className="rounded-card border border-surface-100 bg-surface-50 px-3 py-2">
+      <div className="neo-panel-soft rounded-[24px] px-3 py-2.5">
         <div className="flex items-start gap-2">
           <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-ink-300" />
           <div className="text-xs leading-relaxed text-ink-400">
