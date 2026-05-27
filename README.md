@@ -95,7 +95,7 @@ npm run build   # 产出 dist/
 
 ## 文档
 
-### 用户文档
+### 帮助中心
 - [用户使用指南](docs/roleplay-tavern/用户使用指南.md)
 - [数据备份与恢复指南](docs/roleplay-tavern/数据备份与恢复指南.md)
 - [安全与隐私说明](docs/roleplay-tavern/安全与隐私说明.md)

@@ -10,6 +10,7 @@ const StudioPage = lazy(() => import("../pages/StudioPage").then((m) => ({ defau
 const SettingsPage = lazy(() => import("../pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const DataManagementPage = lazy(() => import("../pages/DataManagementPage").then((m) => ({ default: m.DataManagementPage })));
 const AdminPage = lazy(() => import("../pages/AdminPage").then((m) => ({ default: m.AdminPage })));
+const HelpCenterPage = lazy(() => import("../pages/HelpCenterPage").then((m) => ({ default: m.HelpCenterPage })));
 const NotFoundPage = lazy(() => import("../pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage })));
 
 function PageLoader() {
@@ -33,6 +34,7 @@ export function AppRouter() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/data" element={<DataManagementPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/help" element={<HelpCenterPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

@@ -169,10 +169,10 @@ export function LandingPage() {
             <Github className="h-4 w-4 text-ink-400" />
             GitHub
           </a>
-          <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
+          <Link to="/help" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <FileText className="h-4 w-4 text-ink-400" />
-            用户文档
-          </a>
+            帮助中心
+          </Link>
         </div>
       </div>
 
