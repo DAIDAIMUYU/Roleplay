@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#bg)"/>
+  <g transform="translate(96, 96)">
+    <!-- Mask/face icon -->
+    <path d="M-40,-30 C-40,-50 -20,-60 0,-60 C20,-60 40,-50 40,-30 L40,10 C40,30 20,40 0,40 C-20,40 -40,30 -40,10 Z" fill="white" opacity="0.95"/>
+    <circle cx="-15" cy="-10" r="8" fill="#6366f1"/>
+    <circle cx="15" cy="-10" r="8" fill="#6366f1"/>
+    <path d="M-15,15 Q0,30 15,15" stroke="#6366f1" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

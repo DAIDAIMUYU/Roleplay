@@ -2,6 +2,9 @@ import { Outlet } from "react-router-dom";
 import { useIsMobile } from "../shared/hooks/useMediaQuery";
 import { DesktopSidebar } from "./DesktopSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { PwaUpdatePrompt } from "../shared/components/PwaUpdatePrompt";
+import { PwaInstallPrompt } from "../shared/components/PwaInstallPrompt";
+import { OfflineStatusBanner } from "../shared/components/OfflineStatusBanner";
 
 export function AppShell() {
   const isMobile = useIsMobile();
@@ -13,6 +16,9 @@ export function AppShell() {
           <Outlet />
         </main>
         <MobileBottomNav />
+        <PwaUpdatePrompt />
+        <PwaInstallPrompt />
+        <OfflineStatusBanner />
       </div>
     );
   }
@@ -23,6 +29,9 @@ export function AppShell() {
       <main className="app-scrollbar-clean glass-page-shell min-w-0 flex-1 overflow-y-auto rounded-[44px] border border-white/70 bg-white/36">
         <Outlet />
       </main>
+      <PwaUpdatePrompt />
+      <PwaInstallPrompt />
+      <OfflineStatusBanner />
     </div>
   );
 }
