@@ -14,8 +14,8 @@ export const BUDGET_LIMITS = {
 export interface BudgetAllocation {
   characterPrompt: string;
   templatePrompt: string;
-  worldbookEntries: { id: string; title: string; content: string; priority: number; tokens: number }[];
-  memories: { id: string; title: string; content: string; salience: number; tokens: number }[];
+  worldbookEntries: { id: string; title: string; content: string; priority: number; tokens: number; layer?: string }[];
+  memories: { id: string; title: string; content: string; salience: number; tokens: number; layer?: string }[];
   summary: string;
   recentMessages: string[];
   totalEstimated: number;
@@ -32,8 +32,8 @@ export function estimateTokens(text: string): number {
 export function buildBudget(
   characterPrompt: string,
   templatePrompt: string,
-  entries: { id: string; title: string; content: string; priority: number }[],
-  memories: { id: string; title: string; content: string; salience: number }[],
+  entries: { id: string; title: string; content: string; priority: number; layer?: string }[],
+  memories: { id: string; title: string; content: string; salience: number; layer?: string }[],
   summary: string,
   recentMessages: string[],
   totalBudget = DEFAULT_TOTAL_BUDGET,

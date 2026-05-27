@@ -55,6 +55,7 @@ export const deepseekProvider: ProviderAdapter = {
         temperature: config.temperature ?? 0.8,
         max_tokens: config.maxTokens ?? 1200,
         stream: false,
+        ...(config.userId ? { user: config.userId } : {}),
       }),
     });
     if (!resp.ok) {
@@ -86,6 +87,7 @@ export const deepseekProvider: ProviderAdapter = {
         max_tokens: config.maxTokens ?? 1200,
         stream: true,
         stream_options: { include_usage: true },
+        ...(config.userId ? { user: config.userId } : {}),
       }),
       signal,
     });

@@ -336,6 +336,7 @@ export function ChatRoomPage() {
     contextRunSaveStatus: chat.contextRunSaveStatus,
     latestUsage: chat.latestProviderUsage,
     latestCostEstimate: chat.latestCostEstimate,
+    cacheDiag: chat.cacheDiag,
     providerBalance: chat.providerBalance,
     isBalanceLoading: chat.isBalanceLoading,
     balanceError: chat.balanceError,

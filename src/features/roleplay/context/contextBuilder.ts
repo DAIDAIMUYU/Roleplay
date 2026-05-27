@@ -1,7 +1,7 @@
 import type { CharacterRow, MemoryRow, PromptTemplateRow, WorldbookEntryRow } from "../types/database";
 import type { ChatMessage } from "../providers/provider.types";
 import { buildCharacterSystemPrompt } from "../utils/characterPrompt";
-import { buildBudget, type BudgetAllocation } from "./tokenBudget";
+import { buildBudget, estimateTokens, type BudgetAllocation } from "./tokenBudget";
 import { triggerWorldbookEntries, type TriggerResult } from "./worldbookTrigger";
 
 export interface ContextBuildInput {
@@ -23,6 +23,8 @@ export interface ContextBuildOutput {
   debugInfo: DebugInfo;
   estimatedTokens: number;
   sessionSummaryInjected: boolean;
+  /** Cache diagnostics — short fingerprint hashes only, never full prompt text */
+  cacheDiag: CacheDiagnostics;
 }
 
 export interface DebugInfo {
@@ -36,9 +38,102 @@ export interface DebugInfo {
   buildTimeMs: number;
 }
 
+export interface CacheDiagnostics {
+  /** First 8 hex chars of the stable prefix hash */
+  stablePrefixHash: string | null;
+  /** First 8 hex chars of the dynamic context hash */
+  dynamicContextHash: string | null;
+  /** Estimated % of input tokens that are cacheable */
+  estimatedCacheableRatio: number | null;
+  /** Token count of the stable prefix */
+  stablePrefixTokens: number;
+  /** Token count of the dynamic context (WB, memories, messages) */
+  dynamicContextTokens: number;
+  /** Token count of recent messages */
+  recentMessagesTokens: number;
+  /** Token count of world book entries injected */
+  worldbookTokens: number;
+  /** Token count of memories injected */
+  memoryTokens: number;
+  /** Token count of summary */
+  summaryTokens: number;
+}
+
+/* ── Deterministic helpers ── */
+
+const SECTION_HEADERS = {
+  systemRules: "## 固定系统规则",
+  character: "## 角色设定",
+  template: "## 固定提示词模板",
+  coreWorldbook: "## 常驻世界书",
+  coreMemories: "## 核心记忆",
+  summary: "## 会话摘要",
+  dynamicWorldbook: "## 本轮相关设定",
+  dynamicMemories: "## 本轮相关记忆",
+  recentMessages: "## 最近对话",
+} as const;
+
+/**
+ * Simple non-cryptographic hash (djb2) for fingerprinting.
+ * Returns hex string — only first 8 chars shown to users.
+ */
+function stableHash(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/** Deterministic serializer: title, then content, with fixed newlines */
+function serializeSection(title: string, content: string): string {
+  if (!content.trim()) return "";
+  return `${title}\n${content.trim()}`;
+}
+
+/** Sort world book entries deterministically: priority desc, then title asc, then id asc */
+function sortEntriesForContext(entries: WorldbookEntryRow[]): WorldbookEntryRow[] {
+  return [...entries].sort((a, b) => {
+    const prio = (b.priority ?? 0) - (a.priority ?? 0);
+    if (prio !== 0) return prio;
+    const titleCmp = (a.title ?? "").localeCompare(b.title ?? "", "zh-CN");
+    if (titleCmp !== 0) return titleCmp;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+}
+
+/** Sort memories deterministically: salience desc, then created_at asc, then id asc */
+function sortMemoriesForContext(memories: { id: string; title: string; content: string; salience: number; created_at?: string }[]): typeof memories {
+  return [...memories].sort((a, b) => {
+    const sal = (b.salience ?? 0) - (a.salience ?? 0);
+    if (sal !== 0) return sal;
+    const dateCmp = (a.created_at ?? "").localeCompare(b.created_at ?? "");
+    if (dateCmp !== 0) return dateCmp;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+}
+
+/** Serialize world book entries list deterministically */
+function serializeWorldbook(entries: { title: string; content: string }[]): string {
+  if (entries.length === 0) return "";
+  return entries
+    .map((e) => `【${e.title}】\n${e.content}`)
+    .join("\n\n");
+}
+
+/** Serialize memory entries list deterministically */
+function serializeMemories(entries: { title: string; content: string }[]): string {
+  if (entries.length === 0) return "";
+  return entries
+    .map((m) => `【${m.title}】\n${m.content}`)
+    .join("\n\n");
+}
+
 function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
+
+/* ── Main builder ── */
 
 export function buildContext(input: ContextBuildInput): ContextBuildOutput {
   const start = nowMs();
@@ -53,36 +148,69 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     activeSessionId,
   } = input;
 
+  // ── A. Fixed system rules ──
+  const systemRules = [
+    "你是 Roleplay Tavern 中的 AI 角色扮演助手。",
+    "你必须始终保持角色设定回复，不要自称 AI、模型或服务商，也不要跳出角色。",
+    "回复应自然、符合角色性格和说话风格，不要添加额外说明或分析。",
+  ].join("\n");
+
+  // ── B. Character + Template prompt (deterministic) ──
   const characterPrompt = character ? buildCharacterSystemPrompt(character, template?.content) : "";
-  const templatePrompt = template?.content ?? "";
+  const templateOnly = template?.content ?? "";
+
+  // ── C-F: Split world book into always_on vs dynamic ──
+  const enabledEntries = worldbookEntries.filter((entry) => entry.enabled);
+  const alwaysOnEntries = sortEntriesForContext(
+    // "always_on" entries: those with high priority or pinned/always_on flag
+    enabledEntries.filter((e) => {
+      const flags = e as unknown as Record<string, unknown>;
+      return (e.priority ?? 0) >= 8 || flags.always_on === true || flags.pinned === true;
+    }),
+  );
+  const dynamicEntries = sortEntriesForContext(
+    enabledEntries.filter((e) => !alwaysOnEntries.includes(e)),
+  );
+
+  // ── Split memories into core vs dynamic ──
+  const activeMemories = memories.filter((memory) => memory.status === "active");
+  const coreMemories = sortMemoriesForContext(
+    activeMemories
+      .filter((m) => (m.salience ?? 0) >= 7)
+      .map((m) => ({ id: m.id, title: m.title || "未命名记忆", content: m.content, salience: m.salience, created_at: m.created_at })),
+  );
+  const dynamicMemories = sortMemoriesForContext(
+    activeMemories
+      .filter((m) => !coreMemories.some((c) => c.id === m.id))
+      .map((m) => ({ id: m.id, title: m.title || "未命名记忆", content: m.content, salience: m.salience, created_at: m.created_at })),
+  );
+
+  // ── Summary ──
   const summary = sessionSummary?.trim() ?? "";
+
+  // ── Recent texts for world book triggering ──
   const recentTexts = recentMessages.map((message) => message.content);
 
-  const enabledEntries = worldbookEntries.filter((entry) => entry.enabled);
-  const wbForBudget = enabledEntries.map((entry) => ({
-    id: entry.id,
-    title: entry.title,
-    content: entry.content,
-    priority: entry.priority,
-  }));
-
-  const activeMemories = memories.filter((memory) => memory.status === "active");
-  const memForBudget = activeMemories.map((memory) => ({
-    id: memory.id,
-    title: memory.title || "未命名记忆",
-    content: memory.content,
-    salience: memory.salience,
-  }));
+  // ── Token budget (world book + memory allocation) ──
+  const wbForBudget = [
+    ...alwaysOnEntries.map((e) => ({ id: e.id, title: e.title, content: e.content, priority: e.priority, layer: "core" as const })),
+    ...dynamicEntries.map((e) => ({ id: e.id, title: e.title, content: e.content, priority: e.priority, layer: "dynamic" as const })),
+  ];
+  const memForBudget = [
+    ...coreMemories.map((m) => ({ id: m.id, title: m.title, content: m.content, salience: m.salience, layer: "core" as const })),
+    ...dynamicMemories.map((m) => ({ id: m.id, title: m.title, content: m.content, salience: m.salience, layer: "dynamic" as const })),
+  ];
 
   const budget = buildBudget(
     characterPrompt,
-    templatePrompt,
+    templateOnly,
     wbForBudget,
     memForBudget,
     summary,
     recentTexts,
   );
 
+  // ── World book trigger (keyword matching on user message + recent texts) ──
   const budgetedIds = new Set(budget.worldbookEntries.map((entry) => entry.id));
   const triggerResult = triggerWorldbookEntries(
     enabledEntries,
@@ -93,35 +221,83 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     budgetedIds,
   );
 
-  const parts: string[] = [];
-  if (characterPrompt) parts.push(characterPrompt);
-  if (summary) parts.push(`---\n[会话摘要]\n${summary}`);
-
   const injectedWorldbookEntries = triggerResult.triggered.filter((hit) => hit.injected);
-  if (injectedWorldbookEntries.length > 0) {
-    parts.push(
-      "---\n[世界书参考]\n" +
-        injectedWorldbookEntries
-          .map((hit) => {
-            const keywords = hit.matchedKeywords.length > 0
-              ? `\n命中关键词：${hit.matchedKeywords.join("、")}`
-              : "";
-            return `【${hit.entry.title}】${keywords}\n${hit.entry.content}`;
-          })
-          .join("\n\n"),
-    );
+
+  // Separate injected entries into core vs dynamic
+  const injectedCoreWb = injectedWorldbookEntries.filter((hit) => alwaysOnEntries.some((e) => e.id === hit.entry.id));
+  const injectedDynamicWb = injectedWorldbookEntries.filter((hit) => !injectedCoreWb.includes(hit));
+
+  // Separate budget memories into core vs dynamic
+  const budgetCoreMems = budget.memories.filter((m) => (m as { layer?: string }).layer === "core");
+  const budgetDynamicMems = budget.memories.filter((m) => (m as { layer?: string }).layer !== "core");
+
+  // ── Build system prompt in CACHE-FRIENDLY ORDER ──
+  // A-F: Stable prefix (changes rarely)
+  // G-J: Dynamic content (changes every round)
+
+  const stableParts: string[] = [];
+
+  // A. Fixed system rules
+  stableParts.push(serializeSection(SECTION_HEADERS.systemRules, systemRules));
+
+  // B. Character setting
+  if (characterPrompt) {
+    stableParts.push(serializeSection(SECTION_HEADERS.character, characterPrompt));
   }
 
-  if (budget.memories.length > 0) {
-    parts.push(
-      "---\n[相关记忆]\n" +
-        budget.memories
-          .map((memory) => `【${memory.title}】\n${memory.content}`)
-          .join("\n\n"),
-    );
+  // C. Fixed template
+  if (templateOnly && !characterPrompt.includes(templateOnly)) {
+    stableParts.push(serializeSection(SECTION_HEADERS.template, templateOnly));
   }
 
-  const systemPrompt = parts.join("\n\n").trim();
+  // D. Core world book (always-on entries)
+  if (injectedCoreWb.length > 0) {
+    stableParts.push(serializeSection(
+      SECTION_HEADERS.coreWorldbook,
+      serializeWorldbook(injectedCoreWb.map((h) => ({ title: h.entry.title, content: h.entry.content }))),
+    ));
+  }
+
+  // E. Core memories
+  if (budgetCoreMems.length > 0) {
+    stableParts.push(serializeSection(
+      SECTION_HEADERS.coreMemories,
+      serializeMemories(budgetCoreMems.map((m) => ({ title: m.title, content: m.content }))),
+    ));
+  }
+
+  // F. Summary (medium stability — changes only on manual update)
+  if (summary) {
+    stableParts.push(serializeSection(SECTION_HEADERS.summary, summary));
+  }
+
+  const stablePrefix = stableParts.filter(Boolean).join("\n\n");
+
+  // G-J: Dynamic content
+  const dynamicParts: string[] = [];
+
+  // G. Dynamic world book
+  if (injectedDynamicWb.length > 0) {
+    dynamicParts.push(serializeSection(
+      SECTION_HEADERS.dynamicWorldbook,
+      serializeWorldbook(injectedDynamicWb.map((h) => ({ title: h.entry.title, content: h.entry.content }))),
+    ));
+  }
+
+  // H. Dynamic memories
+  if (budgetDynamicMems.length > 0) {
+    dynamicParts.push(serializeSection(
+      SECTION_HEADERS.dynamicMemories,
+      serializeMemories(budgetDynamicMems.map((m) => ({ title: m.title, content: m.content }))),
+    ));
+  }
+
+  const dynamicContext = dynamicParts.filter(Boolean).join("\n\n");
+
+  // Combine into final system prompt
+  const systemPrompt = [stablePrefix, dynamicContext].filter(Boolean).join("\n\n").trim();
+
+  // ── Build provider messages ──
   const providerMessages: ChatMessage[] = [];
   if (systemPrompt) {
     providerMessages.push({ role: "system", content: systemPrompt });
@@ -139,13 +315,42 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     providerMessages.push({ role: "user", content: userMessage });
   }
 
+  // ── Diagnostics ──
+  const stablePrefixTokens = estimateTokens(stablePrefix);
+  const dynamicContextTokens = estimateTokens(dynamicContext);
+  const recentMessagesTokens = estimateTokens(budget.recentMessages.join("\n"));
+  const worldbookTokens = estimateTokens(
+    [...injectedCoreWb, ...injectedDynamicWb].map((h) => h.entry.content).join("\n"),
+  );
+  const memoryTokens = estimateTokens(
+    [...budgetCoreMems, ...budgetDynamicMems].map((m) => m.content).join("\n"),
+  );
+  const summaryTokens = estimateTokens(summary);
+
+  const totalPromptTokens = stablePrefixTokens + dynamicContextTokens + recentMessagesTokens;
+  const estimatedCacheableRatio = totalPromptTokens > 0
+    ? stablePrefixTokens / totalPromptTokens
+    : null;
+
+  const cacheDiag: CacheDiagnostics = {
+    stablePrefixHash: stablePrefix ? stableHash(stablePrefix).slice(0, 8) : null,
+    dynamicContextHash: dynamicContext ? stableHash(dynamicContext).slice(0, 8) : null,
+    estimatedCacheableRatio,
+    stablePrefixTokens,
+    dynamicContextTokens,
+    recentMessagesTokens,
+    worldbookTokens,
+    memoryTokens,
+    summaryTokens,
+  };
+
   const debugInfo: DebugInfo = {
     characterName: character?.name ?? null,
     templateTitle: template?.title ?? null,
     worldbookHits: injectedWorldbookEntries.length,
     worldbookSkipped: triggerResult.skipped.length,
     memoryHits: budget.memories.length,
-    memorySkipped: Math.max(0, memForBudget.length - budget.memories.length),
+    memorySkipped: Math.max(0, activeMemories.length - budget.memories.length),
     summaryInjected: !!summary,
     buildTimeMs: Math.round(nowMs() - start),
   };
@@ -158,6 +363,7 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     debugInfo,
     estimatedTokens: budget.totalEstimated,
     sessionSummaryInjected: !!summary,
+    cacheDiag,
   };
 }
 

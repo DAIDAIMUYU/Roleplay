@@ -33,6 +33,8 @@ export interface ModelProviderConfig {
   maxTokens: number;
   contextMessageLimit: number;
   streamEnabled: boolean;
+  /** Anonymous stable user ID for DeepSeek cache-aware routing (never email or PII) */
+  userId?: string;
 }
 
 export const DEFAULT_PROVIDER_CONFIG: Omit<ModelProviderConfig, "apiKey"> = {

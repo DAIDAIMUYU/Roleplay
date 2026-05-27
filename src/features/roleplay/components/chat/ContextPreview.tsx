@@ -20,7 +20,7 @@ import {
 import type { CharacterRow, MemoryRow, PromptTemplateRow, WorldbookRow } from "../../types/database";
 import type { ProviderBalanceSnapshot, ProviderCostEstimate, ProviderUsage } from "../../providers/provider.types";
 import { parseCharacterCard } from "../../utils/characterPrompt";
-import type { ContextBuildOutput } from "../../context/contextBuilder";
+import type { CacheDiagnostics, ContextBuildOutput } from "../../context/contextBuilder";
 import { estimateTokens } from "../../context/tokenBudget";
 import { supabase } from "../../../auth/supabaseClient";
 import * as Repo from "../../repositories/roleplayRepository";
@@ -53,6 +53,7 @@ interface ContextPreviewProps {
   contextRunSaveStatus?: "idle" | "saved" | "failed" | null;
   latestUsage?: ProviderUsage | null;
   latestCostEstimate?: ProviderCostEstimate | null;
+  cacheDiag?: CacheDiagnostics | null;
   providerBalance?: ProviderBalanceSnapshot | null;
   isBalanceLoading?: boolean;
   balanceError?: string | null;
@@ -125,6 +126,7 @@ export function ContextPreview(props: ContextPreviewProps) {
     contextRunSaveStatus,
     latestUsage,
     latestCostEstimate,
+    cacheDiag,
     providerBalance,
     isBalanceLoading,
     balanceError,
@@ -597,6 +599,46 @@ export function ContextPreview(props: ContextPreviewProps) {
                   ))}
                 </div>
               </details>
+            )}
+          </div>
+        </ContextSectionCard>
+
+        <ContextSectionCard title="缓存诊断" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={cacheDiag ? "可用" : "预览"} level={3} variant="debug">
+          <div className="space-y-2 pb-1 text-xs text-ink-400">
+            {cacheDiag ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="stats-chip flex items-center justify-between"><span>稳定前缀</span><span>{formatToken(cacheDiag.stablePrefixTokens)} tok</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>动态上下文</span><span>{formatToken(cacheDiag.dynamicContextTokens)} tok</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>最近消息</span><span>{formatToken(cacheDiag.recentMessagesTokens)} tok</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>世界书</span><span>{formatToken(cacheDiag.worldbookTokens)} tok</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>记忆</span><span>{formatToken(cacheDiag.memoryTokens)} tok</span></div>
+                  <div className="stats-chip flex items-center justify-between"><span>摘要</span><span>{formatToken(cacheDiag.summaryTokens)} tok</span></div>
+                </div>
+                {cacheDiag.estimatedCacheableRatio !== null && (
+                  <div className="stats-chip flex items-center justify-between">
+                    <span>预计可缓存比例</span>
+                    <span className="font-medium text-emerald-600">{formatPercent(cacheDiag.estimatedCacheableRatio)}</span>
+                  </div>
+                )}
+                {cacheDiag.stablePrefixHash && (
+                  <div className="stats-chip flex items-center justify-between">
+                    <span>前缀 hash</span>
+                    <span className="font-mono text-[10px]">{cacheDiag.stablePrefixHash}</span>
+                  </div>
+                )}
+                {cacheDiag.dynamicContextHash && (
+                  <div className="stats-chip flex items-center justify-between">
+                    <span>动态 hash</span>
+                    <span className="font-mono text-[10px]">{cacheDiag.dynamicContextHash}</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-ink-300">
+                  稳定前缀不变时可复用 DeepSeek 缓存，降低输入成本。动态内容（世界书、记忆、最近消息）每轮可能变化。
+                </p>
+              </>
+            ) : (
+              <p>暂无上一轮对比数据。发送消息后将生成缓存诊断。</p>
             )}
           </div>
         </ContextSectionCard>

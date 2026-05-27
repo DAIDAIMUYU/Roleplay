@@ -17,7 +17,7 @@ import * as LocalRepo from "../repositories/localRoleplayRepository";
 import * as LocalMirror from "../repositories/localMirror";
 import type { CharacterRow, ContextRunRow, MemoryRow, MessageRevisionRow, PromptTemplateRow, SessionRow } from "../types/database";
 import { buildCharacterSystemPrompt, buildSessionMeta, parseSessionMeta, SESSION_META_VERSION, type SessionMeta } from "../utils/characterPrompt";
-import { buildContext, type ContextBuildOutput } from "../context/contextBuilder";
+import { buildContext, type CacheDiagnostics, type ContextBuildOutput } from "../context/contextBuilder";
 import { getPresetName } from "../providers/providerPresets";
 import { estimateDeepSeekCost } from "../providers/pricing/deepseekPricing";
 import { fetchHostedProviderBalance } from "../services/hostedCredentialsService";
@@ -67,6 +67,7 @@ export interface ChatState {
   isGeneratingMemorySuggestions: boolean;
   latestProviderUsage: ProviderUsage | null;
   latestCostEstimate: ProviderCostEstimate | null;
+  cacheDiag: CacheDiagnostics | null;
   providerBalance: ProviderBalanceSnapshot | null;
   isBalanceLoading: boolean;
   balanceError: string | null;
@@ -382,6 +383,7 @@ export function useChatSession(
     isGeneratingMemorySuggestions: false,
     latestProviderUsage: null,
     latestCostEstimate: null,
+    cacheDiag: null,
     providerBalance: null,
     isBalanceLoading: false,
     balanceError: null,
@@ -1220,7 +1222,7 @@ export function useChatSession(
         isStreaming: true,
         error: null,
         saveStatus: "idle",
-        lastContextOutput: contextOutput,
+        lastContextOutput: contextOutput, cacheDiag: contextOutput?.cacheDiag ?? null,
         messageDbIds: truncateIndexedMap(s.messageDbIds, editIndex + 1),
         messageCreatedAts: truncateIndexedMap(s.messageCreatedAts, editIndex + 1),
         editedIndices: truncateIndexedSet(s.editedIndices, editIndex + 1),
