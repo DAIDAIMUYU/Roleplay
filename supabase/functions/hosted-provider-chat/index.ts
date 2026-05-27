@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { handleCorsPreflight } from "../_shared/cors.ts";
+import { buildCorsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { decryptApiKey } from "../_shared/crypto.ts";
 import { getCredentialForUser } from "../_shared/credentials.ts";
@@ -55,9 +55,9 @@ serve(async (request) => {
 
     if (stream) {
       // ── Streaming path ──
-      // providerChatStream returns a Response with text/event-stream.
-      // We return it directly after updating last_used_at as a fire-and-forget.
-      const streamResponse = await providerChatStream({
+      // providerChatStream returns a ReadableStream — we wrap it in a Response
+      // with proper CORS headers + SSE content-type.
+      const sseStream = await providerChatStream({
         providerType: credential.provider_type,
         baseUrl,
         apiKey,
@@ -82,7 +82,15 @@ serve(async (request) => {
           () => {},
         );
 
-      return streamResponse;
+      const corsHeaders = buildCorsHeaders(request.headers.get("origin"));
+      return new Response(sseStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
     }
 
     // ── Non-streaming path (legacy, backward compatible) ──

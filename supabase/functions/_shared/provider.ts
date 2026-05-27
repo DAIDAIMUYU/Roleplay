@@ -142,8 +142,9 @@ export async function providerChat(config: {
 }
 
 /**
- * Stream chat completion via SSE, returning a Deno Response with text/event-stream.
- * The caller should return this Response directly from the Edge Function handler.
+ * Stream chat completion via SSE.
+ * Returns a ReadableStream of SSE events — the CALLER is responsible for
+ * wrapping it in a Response with appropriate headers (Content-Type, CORS, etc.).
  *
  * SSE events emitted:
  *   event: delta  data: {"text":"..."}
@@ -159,7 +160,7 @@ export async function providerChatStream(config: {
   messages: HostedProviderMessage[];
   temperature?: number;
   maxTokens?: number;
-}): Promise<Response> {
+}): Promise<ReadableStream<Uint8Array>> {
   const isDeepSeek = config.providerType === "deepseek";
 
   const body: Record<string, unknown> = {
@@ -258,14 +259,7 @@ export async function providerChatStream(config: {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  return stream;
 }
 
 function sseEvent(event: string, data: Record<string, unknown>): string {

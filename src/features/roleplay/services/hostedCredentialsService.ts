@@ -60,14 +60,19 @@ async function callFunction<T>(
   if (!supabase) throw new Error("Supabase 未配置。");
   const token = await getAccessToken();
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  if (anonKey) {
+    headers["apikey"] = anonKey;
+  }
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/functions/v1/${functionName}`, {
       method: options?.method ?? "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: options?.method === "GET" ? undefined : JSON.stringify(options?.body ?? {}),
     });
   } catch {
@@ -231,14 +236,20 @@ export async function sendHostedProviderChatStream(
   if (!token) throw new Error("当前未登录，无法使用托管 API 凭据。");
 
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const url = `${baseUrl}/functions/v1/hosted-provider-chat`;
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  if (anonKey) {
+    headers["apikey"] = anonKey;
+  }
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({ ...input, stream: true }),
     signal,
   });
