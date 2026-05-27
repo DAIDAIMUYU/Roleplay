@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Database, HardDrive, Settings, Shield, User } from "lucide-react";
+import { Database, HardDrive, LogOut, Settings, Shield, User } from "lucide-react";
 import { useAuth } from "../features/auth";
 import { DataSyncPanel } from "../features/roleplay/components/settings/DataSyncPanel";
 import { ProviderPresetSelector } from "../features/roleplay/components/settings/ProviderPresetSelector";
@@ -80,8 +80,22 @@ function SectionCard({
 }
 
 export function SettingsPage() {
-  const { isGuestOrDemo, user } = useAuth();
+  const { isGuestOrDemo, user, signOut } = useAuth();
   const currentCredential = getCurrentCredentialSummary();
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    setSignOutBusy(true);
+    try {
+      await signOut();
+    } catch {
+      // signOut handles errors internally
+    } finally {
+      setSignOutBusy(false);
+      setShowSignOutConfirm(false);
+    }
+  }, [signOut]);
 
   return (
     <div className="page-container px-7 py-8 md:px-10 md:py-10">
@@ -157,12 +171,83 @@ export function SettingsPage() {
             description="数据保存在浏览器 IndexedDB 中。清除站点数据或更换设备后可能丢失，建议定期备份。"
             status="风险已说明"
           />
-          <SectionCard
-            icon={<User className="h-5 w-5" />}
-            title="账号"
-            description={user ? "已登录 · 云端同步可用" : "登录后可开启云端同步和托管加密凭据。"}
-            status={user ? "已登录" : "可选"}
-          />
+          {user ? (
+            <div className="neo-panel-soft flex flex-col gap-4 rounded-[28px] p-5">
+              <div className="flex items-start gap-4">
+                <div className="neo-panel-soft flex h-10 w-10 flex-shrink-0 items-center justify-center text-ink-500">
+                  <User className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-ink-700">账号</h3>
+                    <span className="neo-pill bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-600">
+                      已登录
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-400 truncate">{user.email}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-400">
+                    退出后将回到网页本地模式，本地浏览器中的角色、会话等数据不会被删除。
+                  </p>
+                </div>
+              </div>
+
+              {!showSignOutConfirm ? (
+                <button
+                  onClick={() => setShowSignOutConfirm(true)}
+                  className="neo-button flex items-center justify-center gap-2 self-start px-5 py-2.5 text-xs font-medium text-rose-600 transition-all hover:bg-rose-50/60 hover:text-rose-700"
+                >
+                  <LogOut className="h-4 w-4" />
+                  退出登录
+                </button>
+              ) : (
+                <div className="neo-panel space-y-3 rounded-[20px] border border-rose-100/50 p-4">
+                  <p className="text-sm font-medium text-ink-800">退出登录？</p>
+                  <p className="text-xs leading-relaxed text-ink-500">
+                    退出后将停止使用当前云端账号。本地浏览器中的角色、会话、世界书、记忆等数据不会被删除。
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowSignOutConfirm(false)}
+                      disabled={signOutBusy}
+                      className="neo-button flex-1 px-4 py-2 text-xs font-medium text-ink-600"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      disabled={signOutBusy}
+                      className="neo-button-primary flex flex-1 items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold"
+                      style={{
+                        background: "linear-gradient(135deg, rgba(225, 29, 72, 0.88), rgba(244, 63, 94, 0.86))",
+                      }}
+                    >
+                      {signOutBusy ? "退出中..." : "确认退出"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="neo-panel-soft flex items-start gap-4 rounded-[28px] p-5 transition-all duration-[240ms] hover:-translate-y-0.5 hover:ring-1 hover:ring-brand-200/60"
+            >
+              <div className="neo-panel-soft flex h-10 w-10 flex-shrink-0 items-center justify-center text-ink-500">
+                <User className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold text-ink-700">账号</h3>
+                  <span className="neo-pill bg-surface-100 px-2 py-0.5 text-[11px] text-ink-500">
+                    未登录
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-ink-400">
+                  登录后可开启云端同步和托管加密凭据，跨设备继续角色扮演。
+                </p>
+              </div>
+            </Link>
+          )}
           <SectionCard
             icon={<Shield className="h-5 w-5" />}
             title="安全与隐私"
