@@ -110,6 +110,18 @@
     @apply mx-auto w-full max-w-[1520px] px-4 py-6 pb-24 md:px-6 md:py-6 md:pb-8;
   }
 
+  .mobile-bottom-nav-spacer {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-bottom-nav-floating-offset {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+
   .section-divider {
     @apply my-6 border-t border-surface-100/60;
   }

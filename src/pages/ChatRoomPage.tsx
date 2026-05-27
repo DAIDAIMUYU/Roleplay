@@ -490,7 +490,7 @@ export function ChatRoomPage() {
 
   if (isMobile) {
     return (
-      <div className="flex h-dvh flex-col bg-surface-50 pb-safe-bottom">
+      <div className="mobile-bottom-nav-spacer flex h-dvh flex-col bg-surface-50 md:pb-0">
         <div className="flex items-center gap-2 border-b border-surface-100 bg-white px-3 py-2.5">
           <button onClick={() => setShowMobileSessions((value) => !value)} className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100">
             <Drama className="h-4 w-4" />
@@ -592,7 +592,7 @@ export function ChatRoomPage() {
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 py-4">
           {messageList}
           {userScrolledUp && (
-            <button onClick={scrollToBottom} className="fixed bottom-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
+            <button onClick={scrollToBottom} className="fixed bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
               回到底部
             </button>
           )}

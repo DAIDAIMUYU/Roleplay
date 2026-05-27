@@ -11,8 +11,8 @@ export function AppShell() {
 
   if (isMobile) {
     return (
-      <div className="flex min-h-dvh flex-col overflow-x-hidden pb-safe-bottom">
-        <main className="app-scrollbar-clean flex-1 overflow-y-auto">
+      <div className="flex min-h-dvh flex-col overflow-x-hidden">
+        <main className="app-scrollbar-clean mobile-bottom-nav-spacer flex-1 overflow-y-auto md:pb-0">
           <Outlet />
         </main>
         <MobileBottomNav />

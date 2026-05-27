@@ -60,7 +60,7 @@ export function PwaInstallPrompt() {
   if (isStandalone || (!showInstall && !isIOS)) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full mx-4">
+    <div className="mobile-bottom-nav-floating-offset md:bottom-4 fixed left-1/2 z-50 mx-4 w-full max-w-sm -translate-x-1/2">
       <div 
         className="neo-surface p-4"
         style={{ borderRadius: '20px' }}

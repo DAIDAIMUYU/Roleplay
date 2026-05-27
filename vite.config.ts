@@ -1,7 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { webcrypto } from "node:crypto";
 import { VitePWA } from "vite-plugin-pwa";
+
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto as Crypto;
+}
 
 export default defineConfig({
   plugins: [
@@ -41,6 +46,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Keep Workbox bundling compatible with the current Node 18 build environment.
+        // This only affects service worker minification, not app runtime behavior.
+        mode: "development",
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//],
