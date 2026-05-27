@@ -114,20 +114,27 @@ export async function providerChat(config: {
   messages: HostedProviderMessage[];
   temperature?: number;
   maxTokens?: number;
+  userId?: string;
 }): Promise<{ content: string; usage: HostedProviderUsage }> {
+  const isDeepSeek = config.providerType === "deepseek";
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages: config.messages,
+    temperature: config.temperature ?? 0.8,
+    max_tokens: config.maxTokens ?? 1200,
+    stream: false,
+  };
+  if (isDeepSeek && config.userId) {
+    body.user = config.userId;
+  }
+
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: config.messages,
-      temperature: config.temperature ?? 0.8,
-      max_tokens: config.maxTokens ?? 1200,
-      stream: false,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -160,6 +167,7 @@ export async function providerChatStream(config: {
   messages: HostedProviderMessage[];
   temperature?: number;
   maxTokens?: number;
+  userId?: string;
 }): Promise<ReadableStream<Uint8Array>> {
   const isDeepSeek = config.providerType === "deepseek";
 
@@ -173,6 +181,9 @@ export async function providerChatStream(config: {
 
   if (isDeepSeek) {
     body.stream_options = { include_usage: true };
+    if (config.userId) {
+      body.user = config.userId;
+    }
   }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {

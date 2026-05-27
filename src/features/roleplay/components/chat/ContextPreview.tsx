@@ -603,10 +603,82 @@ export function ContextPreview(props: ContextPreviewProps) {
           </div>
         </ContextSectionCard>
 
-        <ContextSectionCard title="缓存诊断" icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />} badge={cacheDiag ? "可用" : "预览"} level={3} variant="debug">
+        <ContextSectionCard
+          title="缓存诊断"
+          icon={<Cpu className="h-3.5 w-3.5 text-ink-400" />}
+          badge={
+            cacheDiag
+              ? cacheDiag.prefixChanged
+                ? "已变化"
+                : "稳定"
+              : "预览"
+          }
+          level={3}
+          variant="debug"
+        >
           <div className="space-y-2 pb-1 text-xs text-ink-400">
             {cacheDiag ? (
               <>
+                {/* Prefix status + change reasons */}
+                <div className="stats-chip flex items-center justify-between">
+                  <span>前缀状态</span>
+                  <span className={`font-medium ${cacheDiag.prefixChanged ? "text-amber-600" : "text-emerald-600"}`}>
+                    {cacheDiag.prefixChanged && cacheDiag.prefixChangeReasons.includes("no_previous_snapshot")
+                      ? "首次构建"
+                      : cacheDiag.prefixChanged
+                        ? "已变化"
+                        : "稳定"}
+                  </span>
+                </div>
+                {cacheDiag.prefixChanged && cacheDiag.prefixChangeReasons.filter((r) => r !== "no_previous_snapshot" && r !== "unchanged").length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {cacheDiag.prefixChangeReasons
+                      .filter((r) => r !== "no_previous_snapshot" && r !== "unchanged")
+                      .map((reason) => (
+                        <span key={reason} className="neo-pill bg-amber-50 text-[10px] text-amber-700">
+                          {{
+                            system_rules_changed: "系统规则",
+                            character_changed: "角色设定",
+                            templates_changed: "固定模板",
+                            persistent_worldbooks_changed: "常驻世界书",
+                            core_memories_changed: "核心记忆",
+                            summary_changed: "摘要",
+                            unchanged: "",
+                            no_previous_snapshot: "",
+                          }[reason] || reason}
+                        </span>
+                      ))}
+                  </div>
+                )}
+
+                {/* Module hash breakdown (collapsible) */}
+                {cacheDiag.snapshot && (
+                  <details className="stats-chip">
+                    <summary className="cursor-pointer font-medium text-ink-500">模块 Hash</summary>
+                    <div className="mt-1.5 space-y-1">
+                      {cacheDiag.snapshot.moduleHashes.systemRules && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">系统规则</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.systemRules}</span></div>
+                      )}
+                      {cacheDiag.snapshot.moduleHashes.character && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">角色设定</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.character}</span></div>
+                      )}
+                      {cacheDiag.snapshot.moduleHashes.templates && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">固定模板</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.templates}</span></div>
+                      )}
+                      {cacheDiag.snapshot.moduleHashes.persistentWorldbooks && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">常驻世界书</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.persistentWorldbooks}</span></div>
+                      )}
+                      {cacheDiag.snapshot.moduleHashes.coreMemories && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">核心记忆</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.coreMemories}</span></div>
+                      )}
+                      {cacheDiag.snapshot.moduleHashes.summary && (
+                        <div className="flex items-center justify-between"><span className="text-ink-400">摘要</span><span className="font-mono text-[10px]">{cacheDiag.snapshot.moduleHashes.summary}</span></div>
+                      )}
+                    </div>
+                  </details>
+                )}
+
+                {/* Token breakdown */}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="stats-chip flex items-center justify-between"><span>稳定前缀</span><span>{formatToken(cacheDiag.stablePrefixTokens)} tok</span></div>
                   <div className="stats-chip flex items-center justify-between"><span>动态上下文</span><span>{formatToken(cacheDiag.dynamicContextTokens)} tok</span></div>
@@ -615,16 +687,18 @@ export function ContextPreview(props: ContextPreviewProps) {
                   <div className="stats-chip flex items-center justify-between"><span>记忆</span><span>{formatToken(cacheDiag.memoryTokens)} tok</span></div>
                   <div className="stats-chip flex items-center justify-between"><span>摘要</span><span>{formatToken(cacheDiag.summaryTokens)} tok</span></div>
                 </div>
+
                 {cacheDiag.estimatedCacheableRatio !== null && (
                   <div className="stats-chip flex items-center justify-between">
                     <span>预计可缓存比例</span>
                     <span className="font-medium text-emerald-600">{formatPercent(cacheDiag.estimatedCacheableRatio)}</span>
                   </div>
                 )}
-                {cacheDiag.stablePrefixHash && (
+
+                {cacheDiag.snapshot?.hash && (
                   <div className="stats-chip flex items-center justify-between">
                     <span>前缀 hash</span>
-                    <span className="font-mono text-[10px]">{cacheDiag.stablePrefixHash}</span>
+                    <span className="font-mono text-[10px]">{cacheDiag.snapshot.hash.slice(0, 8)}</span>
                   </div>
                 )}
                 {cacheDiag.dynamicContextHash && (
@@ -633,6 +707,7 @@ export function ContextPreview(props: ContextPreviewProps) {
                     <span className="font-mono text-[10px]">{cacheDiag.dynamicContextHash}</span>
                   </div>
                 )}
+
                 <p className="text-[11px] text-ink-300">
                   稳定前缀不变时可复用 DeepSeek 缓存，降低输入成本。动态内容（世界书、记忆、最近消息）每轮可能变化。
                 </p>

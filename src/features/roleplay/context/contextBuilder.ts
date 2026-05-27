@@ -13,6 +13,8 @@ export interface ContextBuildInput {
   userMessage: string;
   recentMessages: ChatMessage[];
   activeSessionId: string | null;
+  /** Previous round's cache diagnostics for change detection */
+  previousCacheDiag?: CacheDiagnostics | null;
 }
 
 export interface ContextBuildOutput {
@@ -38,9 +40,41 @@ export interface DebugInfo {
   buildTimeMs: number;
 }
 
+export type PrefixChangeReason =
+  | "system_rules_changed"
+  | "character_changed"
+  | "templates_changed"
+  | "persistent_worldbooks_changed"
+  | "core_memories_changed"
+  | "summary_changed"
+  | "no_previous_snapshot"
+  | "unchanged";
+
+export interface StablePrefixSnapshot {
+  text: string;
+  hash: string;
+  tokenEstimate: number;
+  moduleHashes: {
+    systemRules?: string;
+    character?: string;
+    templates?: string;
+    persistentWorldbooks?: string;
+    coreMemories?: string;
+    summary?: string;
+  };
+  moduleTokens: {
+    systemRules?: number;
+    character?: number;
+    templates?: number;
+    persistentWorldbooks?: number;
+    coreMemories?: number;
+    summary?: number;
+  };
+}
+
 export interface CacheDiagnostics {
-  /** First 8 hex chars of the stable prefix hash */
-  stablePrefixHash: string | null;
+  /** Stable prefix snapshot with per-module breakdown */
+  snapshot: StablePrefixSnapshot | null;
   /** First 8 hex chars of the dynamic context hash */
   dynamicContextHash: string | null;
   /** Estimated % of input tokens that are cacheable */
@@ -57,6 +91,12 @@ export interface CacheDiagnostics {
   memoryTokens: number;
   /** Token count of summary */
   summaryTokens: number;
+  /** Whether the stable prefix changed compared to previous round */
+  prefixChanged: boolean;
+  /** Reasons for prefix change (empty if unchanged) */
+  prefixChangeReasons: PrefixChangeReason[];
+  /** Previous round's stable prefix hash (if available) */
+  previousStablePrefixHash?: string;
 }
 
 /* ── Deterministic helpers ── */
@@ -235,43 +275,57 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
   // A-F: Stable prefix (changes rarely)
   // G-J: Dynamic content (changes every round)
 
-  const stableParts: string[] = [];
+  // Build each stable module individually for per-module hashing
+  const moduleTexts: { key: string; text: string }[] = [];
 
   // A. Fixed system rules
-  stableParts.push(serializeSection(SECTION_HEADERS.systemRules, systemRules));
+  const rulesText = serializeSection(SECTION_HEADERS.systemRules, systemRules);
+  moduleTexts.push({ key: "systemRules", text: rulesText });
 
   // B. Character setting
-  if (characterPrompt) {
-    stableParts.push(serializeSection(SECTION_HEADERS.character, characterPrompt));
-  }
+  const charText = characterPrompt ? serializeSection(SECTION_HEADERS.character, characterPrompt) : "";
+  if (charText) moduleTexts.push({ key: "character", text: charText });
 
-  // C. Fixed template
-  if (templateOnly && !characterPrompt.includes(templateOnly)) {
-    stableParts.push(serializeSection(SECTION_HEADERS.template, templateOnly));
-  }
+  // C. Fixed template (only if not already included in character prompt)
+  const tplText = (templateOnly && !characterPrompt.includes(templateOnly))
+    ? serializeSection(SECTION_HEADERS.template, templateOnly) : "";
+  if (tplText) moduleTexts.push({ key: "templates", text: tplText });
 
   // D. Core world book (always-on entries)
-  if (injectedCoreWb.length > 0) {
-    stableParts.push(serializeSection(
-      SECTION_HEADERS.coreWorldbook,
-      serializeWorldbook(injectedCoreWb.map((h) => ({ title: h.entry.title, content: h.entry.content }))),
-    ));
-  }
+  const coreWbText = injectedCoreWb.length > 0
+    ? serializeSection(SECTION_HEADERS.coreWorldbook, serializeWorldbook(injectedCoreWb.map((h) => ({ title: h.entry.title, content: h.entry.content }))))
+    : "";
+  if (coreWbText) moduleTexts.push({ key: "persistentWorldbooks", text: coreWbText });
 
   // E. Core memories
-  if (budgetCoreMems.length > 0) {
-    stableParts.push(serializeSection(
-      SECTION_HEADERS.coreMemories,
-      serializeMemories(budgetCoreMems.map((m) => ({ title: m.title, content: m.content }))),
-    ));
-  }
+  const coreMemText = budgetCoreMems.length > 0
+    ? serializeSection(SECTION_HEADERS.coreMemories, serializeMemories(budgetCoreMems.map((m) => ({ title: m.title, content: m.content }))))
+    : "";
+  if (coreMemText) moduleTexts.push({ key: "coreMemories", text: coreMemText });
 
   // F. Summary (medium stability — changes only on manual update)
-  if (summary) {
-    stableParts.push(serializeSection(SECTION_HEADERS.summary, summary));
+  const summaryText = summary ? serializeSection(SECTION_HEADERS.summary, summary) : "";
+  if (summaryText) moduleTexts.push({ key: "summary", text: summaryText });
+
+  const stablePrefix = moduleTexts.map((m) => m.text).filter(Boolean).join("\n\n");
+
+  // Build StablePrefixSnapshot
+  const moduleHashes: StablePrefixSnapshot["moduleHashes"] = {};
+  const moduleTokens: StablePrefixSnapshot["moduleTokens"] = {};
+  for (const { key, text } of moduleTexts) {
+    if (text) {
+      (moduleHashes as Record<string, string>)[key] = stableHash(text).slice(0, 8);
+      (moduleTokens as Record<string, number>)[key] = estimateTokens(text);
+    }
   }
 
-  const stablePrefix = stableParts.filter(Boolean).join("\n\n");
+  const snapshot: StablePrefixSnapshot = {
+    text: stablePrefix,
+    hash: stablePrefix ? stableHash(stablePrefix) : "",
+    tokenEstimate: stablePrefix ? estimateTokens(stablePrefix) : 0,
+    moduleHashes,
+    moduleTokens,
+  };
 
   // G-J: Dynamic content
   const dynamicParts: string[] = [];
@@ -332,8 +386,46 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     ? stablePrefixTokens / totalPromptTokens
     : null;
 
+  // ── Prefix change detection ──
+  const prevDiag = input.previousCacheDiag ?? null;
+  const prevSnapshot = prevDiag?.snapshot ?? null;
+  let prefixChanged = false;
+  const prefixChangeReasons: PrefixChangeReason[] = [];
+
+  if (!prevSnapshot) {
+    prefixChanged = true;
+    prefixChangeReasons.push("no_previous_snapshot");
+  } else if (snapshot.hash !== prevSnapshot.hash) {
+    prefixChanged = true;
+    // Detect which module changed
+    const keys: (keyof StablePrefixSnapshot["moduleHashes"])[] = [
+      "systemRules", "character", "templates", "persistentWorldbooks", "coreMemories", "summary",
+    ];
+    for (const key of keys) {
+      const currHash = snapshot.moduleHashes[key];
+      const prevHash = prevSnapshot.moduleHashes[key];
+      if (currHash !== prevHash) {
+        // Map module key to PrefixChangeReason
+        const reasonMap: Record<string, PrefixChangeReason> = {
+          systemRules: "system_rules_changed",
+          character: "character_changed",
+          templates: "templates_changed",
+          persistentWorldbooks: "persistent_worldbooks_changed",
+          coreMemories: "core_memories_changed",
+          summary: "summary_changed",
+        };
+        prefixChangeReasons.push(reasonMap[key]);
+      }
+    }
+    // If no specific module changed but hash differs, the prefix text itself changed
+    if (prefixChangeReasons.length === 0) {
+      prefixChangeReasons.push("unchanged");
+      prefixChanged = false;
+    }
+  }
+
   const cacheDiag: CacheDiagnostics = {
-    stablePrefixHash: stablePrefix ? stableHash(stablePrefix).slice(0, 8) : null,
+    snapshot,
     dynamicContextHash: dynamicContext ? stableHash(dynamicContext).slice(0, 8) : null,
     estimatedCacheableRatio,
     stablePrefixTokens,
@@ -342,6 +434,9 @@ export function buildContext(input: ContextBuildInput): ContextBuildOutput {
     worldbookTokens,
     memoryTokens,
     summaryTokens,
+    prefixChanged,
+    prefixChangeReasons,
+    previousStablePrefixHash: prevSnapshot?.hash?.slice(0, 8) ?? undefined,
   };
 
   const debugInfo: DebugInfo = {

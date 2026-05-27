@@ -35,6 +35,7 @@ serve(async (request) => {
   const temperature = typeof body.temperature === "number" ? body.temperature : undefined;
   const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : undefined;
   const stream = body.stream === true;
+  const userId = typeof body.userId === "string" ? body.userId.trim() : undefined;
 
   if (!credentialId) {
     return errorResponse(request, 400, "缺少 credential_id。");
@@ -65,6 +66,7 @@ serve(async (request) => {
         messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
         temperature,
         maxTokens,
+        userId,
       });
 
       // Update last_used_at (fire-and-forget — don't block the stream)
@@ -102,6 +104,7 @@ serve(async (request) => {
       messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       temperature,
       maxTokens,
+      userId,
     });
 
     await auth.serviceClient

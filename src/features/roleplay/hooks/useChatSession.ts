@@ -711,7 +711,7 @@ export function useChatSession(
         }
       }
 
-      const preview = buildContext({ character, template: null, worldbookEntries: [], memories: [], sessionSummary: null, userMessage: "", recentMessages: messages, activeSessionId: row.id });
+      const preview = buildContext({ character, template: null, worldbookEntries: [], memories: [], sessionSummary: null, userMessage: "", recentMessages: messages, activeSessionId: row.id, previousCacheDiag: null });
       loadedSessionRef.current = row.id;
       setState((s) => ({
         ...s,

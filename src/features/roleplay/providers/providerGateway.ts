@@ -145,6 +145,7 @@ export async function sendProviderRequest(
       temperature: config.temperature,
       max_tokens: config.maxTokens,
       stream: false,
+      userId: config.userId,
     });
   }
   return getAdapter(config.provider).chat(config, messages);
@@ -180,6 +181,7 @@ export function sendProviderStreamRequest(
             messages,
             temperature: config.temperature,
             max_tokens: config.maxTokens,
+            userId: config.userId,
           },
           {
             onDelta: (text) => {

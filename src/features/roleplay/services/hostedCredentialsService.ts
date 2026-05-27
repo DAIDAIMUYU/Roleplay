@@ -40,6 +40,8 @@ export interface HostedProviderChatInput {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  /** Anonymous stable user ID for DeepSeek cache routing (never email or PII) */
+  userId?: string;
 }
 
 async function getAccessToken(): Promise<string> {
