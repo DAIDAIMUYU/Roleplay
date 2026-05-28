@@ -3,7 +3,6 @@ import { useIsMobile } from "../shared/hooks/useMediaQuery";
 import { DesktopSidebar } from "./DesktopSidebar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { PwaUpdatePrompt } from "../shared/components/PwaUpdatePrompt";
-import { PwaInstallPrompt } from "../shared/components/PwaInstallPrompt";
 import { OfflineStatusBanner } from "../shared/components/OfflineStatusBanner";
 
 export function AppShell() {
@@ -17,7 +16,6 @@ export function AppShell() {
         </main>
         <MobileBottomNav />
         <PwaUpdatePrompt />
-        <PwaInstallPrompt />
         <OfflineStatusBanner />
       </div>
     );
@@ -30,7 +28,6 @@ export function AppShell() {
         <Outlet />
       </main>
       <PwaUpdatePrompt />
-      <PwaInstallPrompt />
       <OfflineStatusBanner />
     </div>
   );

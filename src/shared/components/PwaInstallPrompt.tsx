@@ -65,6 +65,12 @@ function persistDismissed(): void {
 }
 
 export function PwaInstallPrompt() {
+  // ── Disabled: PWA install prompt card removed from UI (2026-06-19) ──
+  // PWA itself remains active (manifest, service worker, browser menu install).
+  // See docs/roleplay-tavern/产品界面优化与体验重构记录.md phase 18.6.2
+  return null;
+
+  /* eslint-disable no-unreachable */
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
