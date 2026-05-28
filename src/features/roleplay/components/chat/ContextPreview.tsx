@@ -272,23 +272,23 @@ export function ContextPreview(props: ContextPreviewProps) {
       : null;
   const contextWindowStatus =
     contextUsageRate === null
-      ? "??"
+      ? "未知"
       : contextUsageRate < 0.7
-        ? "??"
+        ? "正常"
         : contextUsageRate < 0.9
-          ? "????"
-          : "????";
+          ? "接近上限"
+          : "建议压缩";
 
   function formatToken(value?: number) {
-    return typeof value === "number" ? value.toLocaleString("zh-CN") : "???";
+    return typeof value === "number" ? value.toLocaleString("zh-CN") : "未返回";
   }
 
   function formatPercent(value?: number) {
-    return typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "???";
+    return typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "未返回";
   }
 
   function formatUsd(value?: number) {
-    return typeof value === "number" ? `$${value.toFixed(6)}` : "???";
+    return typeof value === "number" ? `$${value.toFixed(6)}` : "未返回";
   }
 
   return (

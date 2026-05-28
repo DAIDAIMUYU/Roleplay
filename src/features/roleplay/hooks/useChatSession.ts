@@ -155,6 +155,20 @@ function toFriendlyBalanceError(
   return "余额查询失败，请稍后重试。";
 }
 
+function toErrorMessage(error: unknown, fallback = "操作失败，请稍后重试。"): string {
+  if (error instanceof Error) return error.message || fallback;
+  if (typeof error === "string") return error || fallback;
+  if (error && typeof error === "object") {
+    try {
+      const message = JSON.stringify(error);
+      return message === "{}" ? fallback : message;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 function readDiagnosticsFromContextRun(contextRun: ContextRunRow | null | undefined): {
   usage: ProviderUsage | null;
   costEstimate: ProviderCostEstimate | null;
@@ -774,7 +788,7 @@ export function useChatSession(
       }));
       void setTimeout(() => computeContextWindowEstimate(), 0);
     } catch (error) {
-      setState((s) => ({ ...s, error: String(error), isContextLoading: false }));
+      setState((s) => ({ ...s, error: toErrorMessage(error, "会话列表加载失败，请稍后重试。"), isContextLoading: false }));
     }
   }, [isLocalMode, userId]);
 
@@ -904,7 +918,7 @@ export function useChatSession(
       void setTimeout(() => computeContextWindowEstimate(), 0);
     } catch (error) {
       loadedSessionRef.current = id;
-      setState((s) => ({ ...s, error: String(error), isContextLoading: false, contextPreviewError: "Context preview failed, chat is still available" }));
+      setState((s) => ({ ...s, error: toErrorMessage(error, "会话加载失败，请稍后重试。"), isContextLoading: false, contextPreviewError: "Context preview failed, chat is still available" }));
     }
   }, [isLocalMode, refreshSuggestedMemories, userId]);
 
@@ -958,7 +972,7 @@ export function useChatSession(
         };
       });
     } catch (error) {
-      setState((s) => ({ ...s, error: String(error) }));
+      setState((s) => ({ ...s, error: toErrorMessage(error, "删除会话失败，请稍后重试。") }));
     }
   }, [isLocalMode, userId]);
 
@@ -1368,7 +1382,7 @@ export function useChatSession(
         setState((s) => ({ ...s, activeCharacter: built.character, activeTemplate: built.template }));
       }
     } catch (error) {
-      setState((s) => ({ ...s, error: String(error) }));
+      setState((s) => ({ ...s, error: toErrorMessage(error, "上下文构建失败，请稍后重试。") }));
       return;
     }
 
@@ -1435,8 +1449,9 @@ export function useChatSession(
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        aiContent = aiContent || `[Error: ${String(error)}]`;
-        setState((s) => ({ ...s, error: String(error), messages: [...s.messages, { role: "assistant", content: aiContent }] }));
+        const message = toErrorMessage(error, "模型请求失败，请稍后重试。");
+        aiContent = aiContent || `[Error: ${message}]`;
+        setState((s) => ({ ...s, error: message, messages: [...s.messages, { role: "assistant", content: aiContent }] }));
       }
     } finally {
       abortRef.current = null;
