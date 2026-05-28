@@ -29,6 +29,10 @@
     display: none;
   }
 
+  body.app-modal-open {
+    overflow: hidden;
+  }
+
   #root {
     min-height: 100vh;
     min-height: 100dvh;
@@ -133,11 +137,15 @@
   }
 
   .mobile-modal-safe-footer {
-    padding-bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-modal-safe-content {
     padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.app-modal-open .mobile-bottom-nav-root {
+    display: none;
   }
 
   .section-divider {

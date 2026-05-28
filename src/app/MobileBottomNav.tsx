@@ -14,7 +14,7 @@ export function MobileBottomNav() {
   const showAdmin = canAccessAdminPanel(role);
 
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden">
+    <nav className="mobile-bottom-nav-root pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden">
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white/72 via-white/34 to-transparent backdrop-blur-md" />
       <div className="pointer-events-auto relative mx-3 mb-[calc(8px+env(safe-area-inset-bottom,0px))] rounded-[24px] border border-white/72 bg-white/80 px-2 py-1.5 shadow-[0_-8px_22px_rgba(148,163,184,0.14)] backdrop-blur-2xl">
         <div className="flex items-center gap-1.5">
