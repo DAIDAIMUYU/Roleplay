@@ -174,7 +174,7 @@ export function CharacterEditor({ character, onSave, onClose }: CharacterEditorP
             placeholder="输入后回车添加"
             className="neo-input flex-1 rounded-input px-3 py-2.5 text-sm"
           />
-          <button onClick={addTag} className="neo-button flex items-center gap-1 rounded-[18px] px-3 py-2 text-xs text-ink-600">
+          <button type="button" onClick={addTag} className="neo-button flex items-center gap-1 rounded-[18px] px-3 py-2 text-xs text-ink-600">
             <Plus className="h-3 w-3" />
             添加
           </button>
@@ -184,7 +184,7 @@ export function CharacterEditor({ character, onSave, onClose }: CharacterEditorP
             {tags.map((tag) => (
               <span key={tag} className="neo-pill inline-flex items-center gap-1 bg-brand-50/70 text-xs text-brand-600">
                 {tag}
-                <button onClick={() => setTags(tags.filter((item) => item !== tag))} className="p-0.5 hover:text-rose-500">
+                <button type="button" onClick={() => setTags(tags.filter((item) => item !== tag))} className="p-0.5 hover:text-rose-500">
                   <Trash2 className="h-2.5 w-2.5" />
                 </button>
               </span>
@@ -209,15 +209,16 @@ export function CharacterEditor({ character, onSave, onClose }: CharacterEditorP
         </div>
       ) : null}
 
-      <div className="sticky bottom-0 z-10 -mx-1 flex gap-2 rounded-[24px] border border-white/55 bg-white/62 px-1 py-1.5 backdrop-blur-xl">
+      <div className="mobile-modal-safe-footer sticky bottom-0 z-10 -mx-1 mt-6 flex gap-2 rounded-[24px] border border-white/55 bg-white/82 px-1 py-2 backdrop-blur-xl">
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving || !name.trim()}
           className="neo-button-primary flex-1 rounded-[18px] px-4 py-2.5 text-sm disabled:opacity-50"
         >
           {saving ? "保存中..." : character ? "保存修改" : "创建角色"}
         </button>
-        <button onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
+        <button type="button" onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
           取消
         </button>
       </div>

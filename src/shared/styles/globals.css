@@ -121,23 +121,23 @@
   }
 
   .mobile-bottom-nav-spacer {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-safe-bottom {
-    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-bottom-nav-floating-offset {
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-modal-safe-footer {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-modal-safe-content {
-    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
   }
 
   .section-divider {

@@ -53,8 +53,9 @@ function WbNameModal({
         placeholder="描述（可选）"
         className="neo-input w-full rounded-input px-3 py-2.5 text-sm"
       />
-      <div className="sticky bottom-0 z-10 -mx-1 flex gap-2 rounded-[24px] border border-white/55 bg-white/62 px-1 py-1.5 backdrop-blur-xl">
+      <div className="mobile-modal-safe-footer sticky bottom-0 z-10 -mx-1 mt-6 flex gap-2 rounded-[24px] border border-white/55 bg-white/82 px-1 py-2 backdrop-blur-xl">
         <button
+          type="button"
           onClick={() => {
             onSave(name, desc);
             onClose();
@@ -64,7 +65,7 @@ function WbNameModal({
         >
           保存
         </button>
-        <button onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
+        <button type="button" onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
           取消
         </button>
       </div>

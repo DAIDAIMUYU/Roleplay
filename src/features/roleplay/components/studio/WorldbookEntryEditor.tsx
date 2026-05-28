@@ -110,7 +110,7 @@ export function WorldbookEntryEditor({ entry, worldbook, onSave, onClose }: Worl
             placeholder="输入后回车添加"
             className="neo-input flex-1 rounded-input px-3 py-2.5 text-sm"
           />
-          <button onClick={addTrigger} className="neo-button flex items-center gap-1 rounded-[18px] px-3 py-2 text-xs text-ink-600">
+          <button type="button" onClick={addTrigger} className="neo-button flex items-center gap-1 rounded-[18px] px-3 py-2 text-xs text-ink-600">
             <Plus className="h-3 w-3" />
             添加
           </button>
@@ -120,7 +120,7 @@ export function WorldbookEntryEditor({ entry, worldbook, onSave, onClose }: Worl
             {triggers.map((trigger) => (
               <span key={trigger} className="neo-pill inline-flex items-center gap-1 bg-sky-50/70 text-xs text-sky-600">
                 {trigger}
-                <button onClick={() => setTriggers(triggers.filter((item) => item !== trigger))} className="p-0.5 hover:text-rose-500">
+                <button type="button" onClick={() => setTriggers(triggers.filter((item) => item !== trigger))} className="p-0.5 hover:text-rose-500">
                   <Trash2 className="h-2.5 w-2.5" />
                 </button>
               </span>
@@ -136,15 +136,16 @@ export function WorldbookEntryEditor({ entry, worldbook, onSave, onClose }: Worl
         <p className="mt-1 text-xs text-ink-300">数值越高越优先注入，Token 预算紧张时低优先级可能被跳过。</p>
       </div>
 
-      <div className="sticky bottom-0 z-10 -mx-1 flex gap-2 rounded-[24px] border border-white/55 bg-white/62 px-1 py-1.5 backdrop-blur-xl">
+      <div className="mobile-modal-safe-footer sticky bottom-0 z-10 -mx-1 mt-6 flex gap-2 rounded-[24px] border border-white/55 bg-white/82 px-1 py-2 backdrop-blur-xl">
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving || !title.trim() || !content.trim()}
           className="neo-button-primary flex-1 rounded-[18px] px-4 py-2.5 text-sm disabled:opacity-50"
         >
           {saving ? "保存中..." : "保存条目"}
         </button>
-        <button onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
+        <button type="button" onClick={onClose} className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600">
           取消
         </button>
       </div>

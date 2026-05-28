@@ -50,7 +50,7 @@ export function AppModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center px-3 py-4 md:px-8 md:py-10">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-3 py-4 md:px-8 md:py-10">
       {/* Overlay */}
       <div 
         className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(191,219,254,0.22),_rgba(255,255,255,0.08)_52%,_rgba(255,255,255,0.02)_100%)] backdrop-blur-sm fade-in"
@@ -61,7 +61,7 @@ export function AppModal({
       <div
         className={`neo-panel relative my-auto flex w-full flex-col self-center overflow-hidden rounded-[36px] border border-white/80 bg-white/74 shadow-[0_30px_90px_rgba(96,165,250,0.20)] backdrop-blur-xl modal-enter ${sizeClasses[size]} ${bodyClassName}`}
         style={{
-          maxHeight: "calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
+          maxHeight: "calc(100dvh - 24px - env(safe-area-inset-top, 0px))",
           width: size === "wide" ? "min(900px, calc(100vw - 24px))" : undefined,
         }}
       >
@@ -75,6 +75,7 @@ export function AppModal({
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="neo-button flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-all duration-[280ms] hover:text-brand-600 active:scale-[0.98]"
           >
