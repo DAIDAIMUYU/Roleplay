@@ -38,6 +38,7 @@ export function SessionList({
       <div className="flex items-center justify-between border-b border-white/45 px-4 py-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-300">会话列表</h3>
         <button
+          type="button"
           onClick={onCreate}
           className="neo-button flex h-9 w-9 items-center justify-center text-brand-500"
           title="新建会话"
@@ -57,7 +58,7 @@ export function SessionList({
             className="neo-input w-full py-2 pl-8 pr-7 text-xs focus:border-brand-400"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2">
+            <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2">
               <X className="h-3 w-3 text-ink-300" />
             </button>
           )}
@@ -75,6 +76,7 @@ export function SessionList({
           filtered.map((session) => (
             <button
               key={session.id}
+              type="button"
               onClick={() => onSelect(session.id)}
               className={`mb-2 flex w-full items-start gap-3 rounded-[20px] px-3 py-3 text-left transition-all ${
                 session.id === activeSessionId
@@ -105,6 +107,7 @@ export function SessionList({
               </div>
               {session.id === activeSessionId && onDelete && (
                 <button
+                  type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(session.id);

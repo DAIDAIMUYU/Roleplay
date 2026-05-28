@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, Drama, KeyRound, MessageCircle, Palette, Plus, RefreshCw, Settings, UserCircle, WifiOff, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Drama, KeyRound, MessageCircle, Palette, Plus, RefreshCw, Settings, WifiOff, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth";
 import { supabase } from "../features/auth/supabaseClient";
@@ -214,6 +214,8 @@ export function ChatRoomPage() {
   const [editText, setEditText] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [pickerChars, setPickerChars] = useState<CharacterRow[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
   const [memoryDrafts, setMemoryDrafts] = useState<MemorySuggestionDraft[] | null>(null);
   const [memoryDraftTitle, setMemoryDraftTitle] = useState("AI 鎻愮偧璁板繂");
   const [memorySaveMode, setMemorySaveMode] = useState<"active" | "suggested" | null>(null);
@@ -232,9 +234,58 @@ export function ChatRoomPage() {
     setPickerChars(chars);
   }, [isGuestOrDemo, userId]);
 
-  function handleCreateSession() {
-    void loadPickerChars();
+  const debugCreateSession = useCallback((message: string, extra?: Record<string, unknown>) => {
+    if (import.meta.env.DEV) {
+      console.info("[mobile-create-session]", message, extra ?? {});
+    }
+  }, []);
+
+  const openCreateSessionDialog = useCallback(async (source: string) => {
+    debugCreateSession("openCreateSessionDialog called", {
+      source,
+      sessions: chat.sessions.length,
+      activeSessionId: chat.activeSessionId,
+    });
+    setPickerError(null);
+    setPickerLoading(true);
+    setShowMobileSessions(false);
     setShowPicker(true);
+    try {
+      await loadPickerChars();
+      debugCreateSession("roles loaded", { count: pickerChars.length });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "角色列表加载失败，请稍后重试。";
+      setPickerError(message);
+      debugCreateSession("load roles failed", { message });
+    } finally {
+      setPickerLoading(false);
+    }
+  }, [chat.activeSessionId, chat.sessions.length, debugCreateSession, loadPickerChars, pickerChars.length]);
+
+  function handleCreateSession() {
+    void openCreateSessionDialog("generic");
+  }
+
+  function handleMobileSessionTrigger() {
+    if (!chat.sessions.length) {
+      void openCreateSessionDialog("mobile-header-empty");
+      return;
+    }
+    setShowMobileSessions((value) => !value);
+  }
+
+  async function handleCreateSessionChoice(characterId?: string) {
+    debugCreateSession("createSession selected", { characterId: characterId ?? null });
+    try {
+      await chat.createSession(characterId);
+      setShowPicker(false);
+      setShowMobileSessions(false);
+      debugCreateSession("createSession success", { characterId: characterId ?? null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "创建会话失败，请稍后重试。";
+      setPickerError(message);
+      debugCreateSession("createSession failed", { message });
+    }
   }
 
   useEffect(() => {
@@ -489,20 +540,113 @@ export function ChatRoomPage() {
     </>
   );
 
+  const createSessionPickerModal = (
+    <AppModal
+      open={showPicker}
+      onClose={() => {
+        setShowPicker(false);
+        setPickerError(null);
+      }}
+      title={pickerChars.length > 0 ? "选择聊天角色" : "还没有角色"}
+      description={
+        pickerChars.length > 0
+          ? "选择一个角色开始新会话，也可以创建空白会话。"
+          : "请先在创作工坊创建角色，然后再开始聊天。"
+      }
+      size="sm"
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setShowPicker(false);
+              setPickerError(null);
+            }}
+            className="neo-button rounded-[18px] px-4 py-2.5 text-sm text-ink-600"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCreateSessionChoice()}
+            className="neo-button-primary rounded-[18px] px-4 py-2.5 text-sm"
+          >
+            不绑定角色，创建空白会话
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {pickerLoading ? (
+          <div className="rounded-[24px] border border-sky-100/80 bg-sky-50/40 px-4 py-4 text-sm text-ink-500">
+            正在加载角色列表...
+          </div>
+        ) : pickerError ? (
+          <div className="rounded-[24px] border border-rose-100/80 bg-rose-50/60 px-4 py-4 text-sm text-rose-600">
+            {pickerError}
+          </div>
+        ) : pickerChars.length > 0 ? (
+          <>
+            <div className="space-y-2">
+              {pickerChars.map((character) => (
+                <button
+                  key={character.id}
+                  type="button"
+                  onClick={() => void handleCreateSessionChoice(character.id)}
+                  className="neo-button flex w-full items-center gap-3 rounded-[22px] px-3 py-3 text-left"
+                >
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[16px] bg-brand-50 text-sm text-brand-500">
+                    {character.avatar_emoji || character.name[0]}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink-700">{character.name}</p>
+                    <p className="truncate text-xs text-ink-400">
+                      {String((character.card_json as Record<string, unknown>)?.identity ?? "") || "未填写身份设定"}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <Link
+              to="/studio"
+              onClick={() => setShowPicker(false)}
+              className="neo-button inline-flex w-full items-center justify-center gap-2 rounded-[18px] px-4 py-3 text-sm text-ink-600"
+            >
+              <Palette className="h-4 w-4" />
+              去创作工坊创建角色
+            </Link>
+          </>
+        ) : (
+          <div className="space-y-3 rounded-[24px] border border-amber-100/80 bg-amber-light/20 px-4 py-4">
+            <p className="text-sm text-amber-700">当前还没有角色，请先创建角色，或直接创建空白会话。</p>
+            <Link
+              to="/studio"
+              onClick={() => setShowPicker(false)}
+              className="neo-button-primary inline-flex w-full items-center justify-center gap-2 rounded-[18px] px-4 py-3 text-sm"
+            >
+              <Palette className="h-4 w-4" />
+              去创作工坊创建角色
+            </Link>
+          </div>
+        )}
+      </div>
+    </AppModal>
+  );
+
   if (isMobile) {
     return (
       <div className="mobile-bottom-nav-spacer flex h-dvh flex-col bg-surface-50 md:pb-0">
         <div className="flex items-center gap-2 border-b border-surface-100 bg-white px-3 py-2.5">
-          <button onClick={() => setShowMobileSessions((value) => !value)} className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100">
+          <button type="button" onClick={handleMobileSessionTrigger} className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100">
             <Drama className="h-4 w-4" />
-            <span>浼氳瘽</span>
+            <span>{chat.activeSessionId ? "会话" : "选择角色"}</span>
             <ChevronDown className="h-3 w-3" />
           </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-ink-900">
               {chat.activeSessionId
-                ? chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "聊天房间"
-                : "聊天房间"}
+                ? chat.activeCharacter?.name || chat.sessions.find((session) => session.id === chat.activeSessionId)?.characterName || chat.sessions.find((session) => session.id === chat.activeSessionId)?.title || "空白会话"
+                : "会话"}
             </p>
           </div>
           {providerConfig.storageMode === "hosted_encrypted" && (
@@ -512,10 +656,10 @@ export function ChatRoomPage() {
         </div>
 
         {showMobileSessions && (
-          <div className="absolute left-0 top-0 z-30 flex h-dvh w-72 flex-col bg-white shadow-modal">
+          <div className="absolute left-0 top-0 z-[60] flex h-dvh w-72 flex-col bg-white shadow-modal">
             <div className="flex items-center justify-between border-b p-3">
               <span className="text-sm font-medium">会话</span>
-              <button onClick={() => setShowMobileSessions(false)} className="btn-ghost p-1 text-xs">关闭</button>
+              <button type="button" onClick={() => setShowMobileSessions(false)} className="btn-ghost p-1 text-xs">关闭</button>
             </div>
             <div className="flex-1 overflow-y-auto">
               <SessionList
@@ -526,7 +670,7 @@ export function ChatRoomPage() {
                   setShowMobileSessions(false);
                 }}
                 onCreate={() => {
-                  handleCreateSession();
+                  void openCreateSessionDialog("mobile-session-list");
                   setShowMobileSessions(false);
                 }}
                 onDelete={chat.deleteSession}
@@ -535,8 +679,9 @@ export function ChatRoomPage() {
             </div>
             <div className="border-t p-3 space-y-2">
               <button
+                type="button"
                 onClick={() => {
-                  handleCreateSession();
+                  void openCreateSessionDialog("mobile-session-drawer");
                   setShowMobileSessions(false);
                 }}
                 className="btn-primary flex w-full items-center justify-center gap-2 py-2.5 text-sm"
@@ -559,7 +704,7 @@ export function ChatRoomPage() {
         {showMobileContext && (
           <>
             {/* Backdrop */}
-            <div 
+            <div
               className="absolute inset-0 z-20 bg-black/20 backdrop-blur-sm"
               onClick={() => setShowMobileContext(false)}
             />
@@ -572,7 +717,7 @@ export function ChatRoomPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <h3 className="text-base font-semibold text-ink-900">涓婁笅鏂囨帶鍒跺彴</h3>
+                  <h3 className="text-base font-semibold text-ink-900">上下文控制台</h3>
                   <p className="text-xs text-ink-400">角色、世界书、记忆与费用预览</p>
                 </div>
                 <button 
@@ -593,8 +738,7 @@ export function ChatRoomPage() {
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 py-4">
           {messageList}
           {userScrolledUp && (
-            <button onClick={scrollToBottom} className="fixed bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
-              鍥炲埌搴曢儴
+            <button type="button" onClick={scrollToBottom} className="fixed bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs text-white shadow-elevated">
               回到底部
             </button>
           )}
@@ -604,9 +748,9 @@ export function ChatRoomPage() {
           <div className="flex items-center gap-2 border-t border-rose-200 bg-rose-light/80 px-3 py-2">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 text-rose-500" />
             <p className="flex-1 truncate text-xs text-rose-700">{chat.error}</p>
-            <button onClick={() => void chat.retry()} className="btn-ghost flex items-center gap-1 text-xs text-rose-600">
+            <button type="button" onClick={() => void chat.retry()} className="btn-ghost flex items-center gap-1 text-xs text-rose-600">
               <RefreshCw className="h-3 w-3" />
-              閲嶈瘯
+              重试
             </button>
           </div>
         )}
@@ -637,8 +781,8 @@ export function ChatRoomPage() {
                 if (event.key === "Escape") setEditingIndex(null);
               }}
             />
-            <button onClick={() => { void chat.editAndResend(editingIndex, editText); setEditingIndex(null); }} className="btn-primary px-3 py-1 text-xs">重发</button>
-            <button onClick={() => setEditingIndex(null)} className="btn-ghost text-xs">取消</button>
+            <button type="button" onClick={() => { void chat.editAndResend(editingIndex, editText); setEditingIndex(null); }} className="btn-primary px-3 py-1 text-xs">重发</button>
+            <button type="button" onClick={() => setEditingIndex(null)} className="btn-ghost text-xs">取消</button>
           </div>
         )}
 
@@ -669,6 +813,7 @@ export function ChatRoomPage() {
             }}
           />
         )}
+        {createSessionPickerModal}
       </div>
     );
   }
@@ -683,7 +828,7 @@ export function ChatRoomPage() {
             <button
               onClick={handleCreateSession}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-sky-50 text-brand-500 shadow-sm transition-colors hover:from-brand-100 hover:to-sky-100"
-              title="鏂板缓浼氳瘽"
+              title="新建会话"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -712,7 +857,7 @@ export function ChatRoomPage() {
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-sky-100/60 px-3 py-2.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-sky-500">浼氳瘽鍒楄〃</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-500">会话列表</span>
               <SidebarCollapseButton collapsed={sessionsCollapsed} onToggle={toggleSessionsCollapsed} side="left" />
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -830,7 +975,7 @@ export function ChatRoomPage() {
               onToggle={toggleContextCollapsed} 
               side="right"
               floating
-              ariaLabel="灞曞紑涓婁笅鏂囨帶鍒跺彴"
+              ariaLabel="展开上下文控制台"
             />
           </div>
         ) : (
@@ -844,7 +989,7 @@ export function ChatRoomPage() {
                 collapsed={contextCollapsed} 
                 onToggle={toggleContextCollapsed} 
                 side="right"
-                ariaLabel="鏀惰捣涓婁笅鏂囨帶鍒跺彴"
+                ariaLabel="收起上下文控制台"
               />
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -854,68 +999,7 @@ export function ChatRoomPage() {
         )}
       </div>
 
-      <AppModal
-        open={showPicker}
-        onClose={() => setShowPicker(false)}
-        title="选择聊天角色"
-        description={
-          pickerChars.length > 0
-            ? "选择一个角色后再创建会话；也可以直接创建空白会话。"
-            : "当前还没有角色，请先去创作工坊创建角色。"
-        }
-        size="sm"
-      >
-        <div className="space-y-3">
-          {pickerChars.length > 0 ? (
-            <>
-              <button
-                onClick={() => {
-                  setShowPicker(false);
-                  void chat.createSession();
-                }}
-                className="neo-button w-full px-3 py-3 text-left text-sm text-ink-600"
-              >
-                <UserCircle className="mr-2 inline h-4 w-4" />
-                不绑定角色，开始空白会话
-              </button>
-              <div className="space-y-2">
-                {pickerChars.map((character) => (
-                  <button
-                    key={character.id}
-                    onClick={() => {
-                      setShowPicker(false);
-                      void chat.createSession(character.id);
-                    }}
-                    className="neo-button flex w-full items-center gap-3 rounded-[22px] px-3 py-3 text-left"
-                  >
-                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[16px] bg-brand-50 text-sm text-brand-500">
-                      {character.avatar_emoji || character.name[0]}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-ink-700">{character.name}</p>
-                      <p className="truncate text-xs text-ink-400">
-                        {String((character.card_json as Record<string, unknown>)?.identity ?? "") || "未填写身份设定"}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="space-y-3 rounded-[24px] border border-amber-100/80 bg-amber-light/20 px-4 py-4">
-              <p className="text-sm text-amber-700">请先创建角色，再开始绑定角色的对话。</p>
-              <Link
-                to="/studio"
-                onClick={() => setShowPicker(false)}
-                className="neo-button-primary inline-flex w-full items-center justify-center gap-2 rounded-[18px] px-4 py-3 text-sm"
-              >
-                <Palette className="h-4 w-4" />
-                去创作工坊创建角色
-              </Link>
-            </div>
-          )}
-        </div>
-      </AppModal>
+      {createSessionPickerModal}
 
       {memoryDrafts && (
         <MemorySuggestionModal
