@@ -61,8 +61,8 @@ export function LandingPage() {
           本地优先的<br className="md:hidden" /> AI 角色酒馆
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-ink-400 md:text-base">
-          创建角色、配置世界书与记忆，在本地保存你的角色扮演数据。<br className="hidden md:block" />
-          不登录也能使用本地模式；想体验真实 AI 聊天，通常需要先配置 API。
+          创建角色、配置世界书与记忆，在当前浏览器保存你的角色扮演数据。<br className="hidden md:block" />
+          不登录也能本地使用；需要真实 AI 回复时，先配置自己的 Provider API。
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link to="/roleplay" className="btn-primary px-8 py-3 text-base font-semibold shadow-lg shadow-brand-200/50">
@@ -72,6 +72,10 @@ export function LandingPage() {
           <Link to="/settings" className="btn-secondary px-6 py-3 text-sm">
             <KeyRound className="mr-1.5 h-4 w-4" />
             配置 API
+          </Link>
+          <Link to="/help" className="btn-secondary px-6 py-3 text-sm">
+            <FileText className="mr-1.5 h-4 w-4" />
+            帮助中心
           </Link>
           {!user && (
             <Link to="/login" className="btn-ghost px-6 py-3 text-sm">
@@ -84,8 +88,8 @@ export function LandingPage() {
 
       {/* ─── How to Start ─── */}
       <div className="mb-10">
-        <h2 className="mb-2 text-center text-lg font-bold text-ink-900">如何快速开始聊天？</h2>
-        <p className="mb-6 text-center text-sm text-ink-400">只需三步，即可开始你的角色扮演之旅</p>
+        <h2 className="mb-2 text-center text-lg font-bold text-ink-900">第一次使用，按这三步走</h2>
+        <p className="mb-6 text-center text-sm text-ink-400">先准备 API 和角色，再进入聊天室创建会话。</p>
 
         <div className="grid gap-4 md:grid-cols-3">
           {/* Step 1 */}
@@ -100,7 +104,7 @@ export function LandingPage() {
               </div>
             </div>
             <p className="mb-4 text-xs leading-relaxed text-ink-400">
-              选择 DeepSeek、OpenAI-compatible 或其他 Provider，填入你的 API Key。未配置 API 时仍可使用本地预览模式。
+              点「配置 API」进入设置中心，选择 DeepSeek 或 OpenAI-compatible Provider，填入自己的 API Key 并测试连接。
             </p>
             <Link to="/settings" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
               去配置 API
@@ -120,7 +124,7 @@ export function LandingPage() {
               </div>
             </div>
             <p className="mb-4 text-xs leading-relaxed text-ink-400">
-              在创作工坊创建角色卡，设置身份、性格、说话风格和基础规则。
+              点「去创作工坊」创建角色卡，填写角色名称、身份定位、说话风格和开场设定。
             </p>
             <Link to="/studio" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
               去创作工坊
@@ -140,7 +144,7 @@ export function LandingPage() {
               </div>
             </div>
             <p className="mb-4 text-xs leading-relaxed text-ink-400">
-              进入聊天室，选择角色并创建会话后即可开始角色扮演。
+              点「去聊天室」，选择刚创建的角色并新建会话。没有 API 时只能本地预览，配置后即可获得真实模型回复。
             </p>
             <Link to="/roleplay" className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700">
               去聊天室
@@ -165,9 +169,9 @@ export function LandingPage() {
             <KeyRound className="h-4 w-4 text-ink-400" />
             API 配置说明
           </Link>
-          <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
+          <a href="https://github.com/DAIDAIMUYU/Roleplay.git" target="_blank" rel="noreferrer" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <Github className="h-4 w-4 text-ink-400" />
-            GitHub
+            GitHub 项目
           </a>
           <Link to="/help" className="neo-button flex items-center gap-2 p-3 text-xs text-ink-600 hover:text-brand-600">
             <FileText className="h-4 w-4 text-ink-400" />
@@ -213,7 +217,7 @@ export function LandingPage() {
               </span>
             </div>
             <p className="mt-1.5 text-xs text-ink-400">
-              {api.status === "untested" ? "在设置中启用 API 配置后可调用真实模型。" : getStorageModeLabel(getEnabledConfig()?.storageMode || "session_only")}
+              {api.status === "untested" ? "未启用 API 时不会调用真实模型；进入设置中心配置后再开始聊天。" : getStorageModeLabel(getEnabledConfig()?.storageMode || "session_only")}
             </p>
           </div>
 
