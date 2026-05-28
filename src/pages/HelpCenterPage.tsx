@@ -56,15 +56,15 @@ function SectionBlock({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-6">
-      <div className="neo-panel p-5 md:p-6">
+    <section id={id} className="max-w-full scroll-mt-6">
+      <div className="neo-panel max-w-full p-4 md:p-6">
         <div className="mb-4 flex items-center gap-3">
-          <div className="neo-panel-soft flex h-10 w-10 items-center justify-center text-brand-500">
+          <div className="neo-panel-soft flex h-10 w-10 flex-shrink-0 items-center justify-center text-brand-500">
             {icon}
           </div>
-          <h2 className="text-lg font-bold text-ink-900">{title}</h2>
+          <h2 className="min-w-0 break-words text-base font-bold text-ink-900 md:text-lg">{title}</h2>
         </div>
-        <div className="space-y-3 text-sm leading-relaxed text-ink-600">{children}</div>
+        <div className="max-w-full space-y-3 break-words text-sm leading-relaxed text-ink-600">{children}</div>
       </div>
     </section>
   );
@@ -74,10 +74,10 @@ function QuickEntry({ to, icon, label }: { to: string; icon: ReactNode; label: s
   return (
     <Link
       to={to}
-      className="neo-button flex items-center gap-2 px-4 py-2.5 text-xs font-medium text-ink-600 transition-all hover:-translate-y-0.5 hover:text-brand-600"
+      className="neo-button flex min-w-0 items-center gap-2 px-4 py-2.5 text-xs font-medium text-ink-600 transition-all hover:-translate-y-0.5 hover:text-brand-600"
     >
-      <span className="text-ink-400">{icon}</span>
-      {label}
+      <span className="flex-shrink-0 text-ink-400">{icon}</span>
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
@@ -96,20 +96,20 @@ function StepCard({
   actionTo: string;
 }) {
   return (
-    <div className="neo-panel-soft flex flex-col p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-100/25">
+    <div className="neo-panel-soft flex max-w-full flex-col p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-100/25 md:p-5">
       <div className="mb-3 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-500">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-500">
           {step}
         </div>
-        <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
+        <h3 className="min-w-0 break-words text-sm font-semibold text-ink-900">{title}</h3>
       </div>
       <p className="mb-4 flex-1 text-xs leading-relaxed text-ink-500">{description}</p>
       <Link
         to={actionTo}
-        className="neo-button inline-flex items-center gap-1.5 self-start px-4 py-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+        className="neo-button inline-flex max-w-full items-center gap-1.5 self-start px-4 py-2 text-xs font-medium text-brand-600 hover:text-brand-700"
       >
-        {actionLabel}
-        <ExternalLink className="h-3 w-3" />
+        <span className="truncate">{actionLabel}</span>
+        <ExternalLink className="h-3 w-3 flex-shrink-0" />
       </Link>
     </div>
   );
@@ -117,9 +117,9 @@ function StepCard({
 
 function InfoCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="neo-panel-soft p-4">
-      <h4 className="text-sm font-semibold text-ink-800">{title}</h4>
-      <div className="mt-1.5 text-xs leading-relaxed text-ink-500">{children}</div>
+    <div className="neo-panel-soft max-w-full p-4">
+      <h4 className="break-words text-sm font-semibold text-ink-800">{title}</h4>
+      <div className="mt-1.5 break-words text-xs leading-relaxed text-ink-500">{children}</div>
     </div>
   );
 }
@@ -128,20 +128,20 @@ function FaqItem({ question, children }: { question: string; children: ReactNode
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="neo-panel-soft overflow-hidden transition-all duration-[240ms]">
+    <div className="neo-panel-soft max-w-full overflow-hidden transition-all duration-[240ms]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between gap-3 p-4 text-left"
       >
-        <span className="text-sm font-medium text-ink-700">{question}</span>
+        <span className="min-w-0 break-words text-sm font-medium text-ink-700">{question}</span>
         <ChevronDown
           className={`h-4 w-4 flex-shrink-0 text-ink-400 transition-transform duration-[240ms] ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
-      {open && <div className="px-4 pb-4 text-sm leading-relaxed text-ink-500">{children}</div>}
+      {open && <div className="break-words px-4 pb-4 text-sm leading-relaxed text-ink-500">{children}</div>}
     </div>
   );
 }
@@ -157,18 +157,18 @@ export function HelpCenterPage() {
   }, []);
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative max-w-full overflow-x-hidden">
       <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-gradient-to-br from-sky-200/50 to-blue-200/30 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-gradient-to-tr from-blue-200/40 to-sky-100/30 blur-3xl" />
       <div className="pointer-events-none absolute right-1/4 top-1/3 h-48 w-48 rounded-full bg-gradient-to-br from-indigo-100/30 to-purple-100/20 blur-2xl" />
 
-      <div className="page-container-wide relative px-5 py-8 md:px-8 md:py-10">
-        <header className="mb-8">
+      <div className="page-container-wide relative max-w-full px-4 py-6 sm:px-5 md:px-8 md:py-10">
+        <header className="mb-6 max-w-full md:mb-8">
           <div className="neo-pill mb-3 inline-flex items-center gap-2 bg-brand-50/80 text-sm text-brand-600">
             <BookOpen className="h-4 w-4" />
             帮助中心
           </div>
-          <h1 className="text-3xl font-bold leading-tight text-ink-900 md:text-4xl">
+          <h1 className="break-words text-2xl font-bold leading-tight text-ink-900 md:text-4xl">
             从零开始使用 Roleplay Tavern
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-500 md:text-base">
@@ -176,11 +176,11 @@ export function HelpCenterPage() {
           </p>
         </header>
 
-        <div className="neo-panel-soft mb-6 rounded-[24px] px-4 py-3 text-sm text-ink-500">
+        <div className="neo-panel-soft mb-5 max-w-full rounded-[24px] px-4 py-3 text-sm leading-relaxed text-ink-500 md:mb-6">
           快速记住：不登录也能本地使用；真实 AI 回复需要配置 API；角色先在创作工坊创建；登录只是为了云端同步和跨设备托管凭据。
         </div>
 
-        <div className="mb-8 flex flex-wrap items-center gap-2">
+        <div className="mb-6 grid max-w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center md:mb-8">
           <QuickEntry to="/settings" icon={<KeyRound className="h-4 w-4" />} label="配置 API" />
           <QuickEntry to="/studio" icon={<Palette className="h-4 w-4" />} label="创建角色" />
           <QuickEntry to="/roleplay" icon={<MessageCircle className="h-4 w-4" />} label="进入聊天" />
@@ -189,14 +189,14 @@ export function HelpCenterPage() {
             href={GITHUB_REPOSITORY_URL}
             target="_blank"
             rel="noreferrer"
-            className="neo-button flex items-center gap-2 px-4 py-2.5 text-xs font-medium text-ink-600 transition-all hover:-translate-y-0.5 hover:text-brand-600"
+            className="neo-button col-span-2 flex min-w-0 items-center gap-2 px-4 py-2.5 text-xs font-medium text-ink-600 transition-all hover:-translate-y-0.5 hover:text-brand-600 sm:col-span-1"
           >
-            <Github className="h-4 w-4 text-ink-400" />
-            GitHub 项目
+            <Github className="h-4 w-4 flex-shrink-0 text-ink-400" />
+            <span className="truncate">GitHub 项目</span>
           </a>
         </div>
 
-        <div className="flex gap-6">
+        <div className="flex max-w-full flex-col gap-5 lg:flex-row lg:gap-6">
           <aside className="hidden w-56 flex-shrink-0 lg:block">
             <nav className="neo-surface sticky top-8 space-y-1 p-3" style={{ borderRadius: "24px" }}>
               <p className="mb-2 px-3 pt-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">
@@ -220,7 +220,7 @@ export function HelpCenterPage() {
             </nav>
           </aside>
 
-          <div className="mb-5 lg:hidden">
+          <div className="max-w-full lg:hidden">
             <button
               type="button"
               onClick={() => setMobileNavOpen((value) => !value)}
@@ -237,13 +237,13 @@ export function HelpCenterPage() {
               />
             </button>
             {mobileNavOpen && (
-              <div className="neo-panel-soft flex flex-wrap gap-1.5 p-3">
+              <div className="neo-panel-soft scrollbar-none flex max-w-full gap-2 overflow-x-auto p-3">
                 {navSections.map(({ id, label }) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => scrollToSection(id)}
-                    className={`neo-pill text-xs transition-all ${
+                    className={`neo-pill flex-shrink-0 whitespace-nowrap text-xs transition-all ${
                       activeSection === id ? "bg-brand-50 text-brand-700" : "text-ink-500 hover:text-ink-700"
                     }`}
                   >
@@ -254,7 +254,7 @@ export function HelpCenterPage() {
             )}
           </div>
 
-          <main className="min-w-0 flex-1 space-y-6">
+          <main className="min-w-0 max-w-full flex-1 space-y-5 md:space-y-6">
             <SectionBlock id="welcome" title="欢迎使用 Roleplay Tavern" icon={<Sparkles className="h-5 w-5" />}>
               <p>
                 Roleplay Tavern 是一个本地优先的 AI 角色酒馆。它适合写角色卡、整理世界观、保存长期记忆，并和角色进行连续对话。
@@ -415,8 +415,8 @@ export function HelpCenterPage() {
                   请先确认使用最新版本；如果仍异常，清理 PWA 缓存后重开页面。
                 </InfoCard>
               </div>
-              <div className="neo-panel-soft mt-3 flex flex-wrap items-center gap-3 p-4">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+              <div className="neo-panel-soft mt-3 flex max-w-full flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
+                <ShieldCheck className="h-5 w-5 flex-shrink-0 text-emerald-500" />
                 <p className="flex-1 text-xs leading-relaxed text-ink-500">
                   仍然无法解决时，可以在 GitHub 提交问题，并附上页面、设备、浏览器和复现步骤。
                 </p>
@@ -424,18 +424,18 @@ export function HelpCenterPage() {
                   href={GITHUB_REPOSITORY_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="neo-button inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-brand-600"
+                  className="neo-button inline-flex max-w-full items-center gap-2 px-4 py-2 text-xs font-medium text-brand-600"
                 >
-                  <Github className="h-4 w-4" />
-                  项目仓库
+                  <Github className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">项目仓库</span>
                 </a>
               </div>
             </SectionBlock>
           </main>
         </div>
 
-        <footer className="mt-10 text-center">
-          <div className="mb-3 flex flex-wrap justify-center gap-2 text-xs">
+        <footer className="mt-10 pb-8 text-center md:pb-0">
+          <div className="mb-3 flex max-w-full flex-wrap justify-center gap-2 text-xs">
             <span className="neo-pill text-ink-500">
               <Settings className="mr-1 h-3.5 w-3.5" />
               网页模式
