@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Download, Smartphone, X } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -6,23 +6,32 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const DISMISS_KEY = "rp_pwa_install_dismissed_at";
-const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const DISMISS_KEY = "roleplay:pwa-install-dismissed-at";
+const DISMISS_DAYS = 30;
+const DISMISS_MS = DISMISS_DAYS * 24 * 60 * 60 * 1000;
 
 function isStandaloneMode(): boolean {
   if (typeof window === "undefined") return true;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true
-  );
+  try {
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isIOSDevice(): boolean {
   if (typeof window === "undefined") return false;
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-    !(window as unknown as { MSStream: boolean }).MSStream
-  );
+  try {
+    return (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+      !(window as unknown as { MSStream: boolean }).MSStream
+    );
+  } catch {
+    return false;
+  }
 }
 
 function wasDismissed(): boolean {
@@ -30,8 +39,12 @@ function wasDismissed(): boolean {
     const raw = localStorage.getItem(DISMISS_KEY);
     if (!raw) return false;
     const timestamp = parseInt(raw, 10);
-    if (isNaN(timestamp)) return false;
-    return Date.now() - timestamp < DISMISS_COOLDOWN_MS;
+    if (isNaN(timestamp) || timestamp <= 0) return false;
+    const elapsed = Date.now() - timestamp;
+    if (import.meta.env.DEV) {
+      console.log("[PWA] wasDismissed check: elapsed=", Math.round(elapsed / 86400000), "days, limit=", DISMISS_DAYS, "days");
+    }
+    return elapsed < DISMISS_MS;
   } catch {
     return false;
   }
@@ -39,18 +52,38 @@ function wasDismissed(): boolean {
 
 function persistDismissed(): void {
   try {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    const now = Date.now();
+    localStorage.setItem(DISMISS_KEY, String(now));
+    if (import.meta.env.DEV) {
+      console.log("[PWA] persistDismissed: saved timestamp=", now);
+    }
   } catch {
-    // ignore storage failures
+    if (import.meta.env.DEV) {
+      console.warn("[PWA] persistDismissed: localStorage write failed");
+    }
   }
 }
 
 export function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showInstall, setShowInstall] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [dismissed, setDismissed] = useState(true); // start true, set false after check
+  const [dismissed, setDismissed] = useState(false);
+
+  // ── Dismiss handler (multiple event bindings for mobile safety) ──
+  const handleDismiss = useCallback((e?: React.MouseEvent | React.PointerEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (import.meta.env.DEV) {
+      console.log("[PWA] handleDismiss called, hiding and persisting");
+    }
+    setVisible(false);
+    setDismissed(true);
+    persistDismissed();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -60,74 +93,100 @@ export function PwaInstallPrompt() {
     setIsIOS(ios);
     setIsStandalone(standalone);
 
-    // Don't show if already installed
+    if (import.meta.env.DEV) {
+      console.log("[PWA] init: ios=", ios, "standalone=", standalone);
+    }
+
+    // Standalone → never show
     if (standalone) {
       setDismissed(true);
+      setVisible(false);
       return;
     }
 
-    // Check dismiss state
-    if (wasDismissed()) {
+    // Check localStorage dismiss
+    const alreadyDismissed = wasDismissed();
+    if (alreadyDismissed) {
+      if (import.meta.env.DEV) {
+        console.log("[PWA] init: already dismissed, hiding");
+      }
       setDismissed(true);
-    } else {
-      setDismissed(false);
+      setVisible(false);
+      return;
     }
+
+    // Not dismissed → show
+    setDismissed(false);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      if (!wasDismissed()) {
-        setShowInstall(true);
+      if (import.meta.env.DEV) {
+        console.log("[PWA] beforeinstallprompt fired");
       }
+      // Re-check dismiss state at event time
+      if (wasDismissed()) {
+        if (import.meta.env.DEV) {
+          console.log("[PWA] beforeinstallprompt: already dismissed, ignoring");
+        }
+        return;
+      }
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setVisible(true);
     };
 
-    // On iOS, beforeinstallprompt doesn't fire, so we show manual prompt
-    if (ios && !standalone && !wasDismissed()) {
-      setShowInstall(true);
+    // iOS: show manual prompt immediately (beforeinstallprompt won't fire)
+    if (ios) {
+      if (import.meta.env.DEV) {
+        console.log("[PWA] iOS: showing manual install prompt");
+      }
+      setVisible(true);
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
+    // Also hide when app is actually installed
+    const handleAppInstalled = () => {
+      if (import.meta.env.DEV) {
+        console.log("[PWA] appinstalled event fired");
+      }
+      setVisible(false);
+      setDismissed(true);
+      persistDismissed();
+    };
+    window.addEventListener("appinstalled", handleAppInstalled);
+
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
 
-  const handleInstall = async () => {
+  const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;
-
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-
-    if (outcome === "accepted") {
-      setShowInstall(false);
-      setDismissed(true);
-      // Permanent dismiss on successful install
-      persistDismissed();
+    try {
+      await deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setVisible(false);
+        setDismissed(true);
+        persistDismissed();
+      }
+    } catch {
+      // prompt may fail on some browsers
     }
     setDeferredPrompt(null);
-  };
+  }, [deferredPrompt]);
 
-  const handleDismiss = () => {
-    setShowInstall(false);
-    setDismissed(true);
-    persistDismissed();
-  };
-
-  // Don't show if standalone, dismissed, or nothing to show
-  if (isStandalone || dismissed) return null;
-
-  // On non-iOS, only show if we have a prompt available
+  // ── Render guards (ordered by priority) ──
+  if (isStandalone) return null;
+  if (dismissed) return null;
+  if (!visible) return null;
   if (!isIOS && !deferredPrompt) return null;
 
-  // On iOS, show manual prompt; on non-iOS, show if deferredPrompt is available
-  const shouldShow = (isIOS && !isStandalone) || (!isIOS && deferredPrompt !== null);
-  if (!shouldShow || !showInstall) return null;
-
   return (
-    <div className="mobile-bottom-nav-floating-offset md:bottom-4 fixed left-1/2 z-40 mx-4 w-full max-w-sm -translate-x-1/2 pointer-events-auto">
+    <div className="pwa-install-prompt-root mobile-bottom-nav-floating-offset md:bottom-4 fixed left-1/2 z-30 mx-4 w-full max-w-sm -translate-x-1/2 pointer-events-auto">
       <div
-        className="neo-surface p-4"
+        className="neo-surface p-4 relative"
         style={{ borderRadius: "20px" }}
       >
         <div className="flex items-start gap-3">
@@ -153,14 +212,24 @@ export function PwaInstallPrompt() {
               </button>
             )}
           </div>
+          {/* X close button — multi-binding for mobile safety */}
           <button
             onClick={handleDismiss}
+            onPointerDown={(e) => {
+              // Capture pointer early on mobile
+              e.preventDefault();
+              handleDismiss(e);
+            }}
             type="button"
             aria-label="关闭安装提示"
-            className="p-2 text-ink-300 hover:text-ink-500 flex-shrink-0"
-            style={{ minWidth: "44px", minHeight: "44px" }}
+            className="relative z-10 p-2 text-ink-300 hover:text-ink-500 active:text-ink-700 flex-shrink-0"
+            style={{
+              minWidth: "44px",
+              minHeight: "44px",
+              touchAction: "manipulation",
+            }}
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4 pointer-events-none" />
           </button>
         </div>
       </div>

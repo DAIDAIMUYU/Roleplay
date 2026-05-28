@@ -136,6 +136,11 @@
     bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* Hide PWA install prompt when AppModal is open */
+  body.app-modal-open .pwa-install-prompt-root {
+    display: none !important;
+  }
+
   .mobile-modal-safe-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
