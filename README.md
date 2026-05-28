@@ -52,8 +52,10 @@ npx tsc -b
 
 - 应用内帮助中心：`/help`
 - 数据管理：`/settings/data`
-- Provider 支持矩阵：[docs/roleplay-tavern/Provider支持矩阵.md](docs/roleplay-tavern/Provider支持矩阵.md)
-- 部署上线指南：[docs/roleplay-tavern/部署上线指南.md](docs/roleplay-tavern/部署上线指南.md)
+- 文档中心：[docs/README.md](docs/README.md)
+- 用户指南：[docs/roleplay-tavern/01-用户指南.md](docs/roleplay-tavern/01-用户指南.md)
+- 配置与部署：[docs/roleplay-tavern/02-配置与部署.md](docs/roleplay-tavern/02-配置与部署.md)
+- 第二阶段执行计划：[docs/roleplay-tavern/06-第二阶段执行计划.md](docs/roleplay-tavern/06-第二阶段执行计划.md)
 
 ## 技术栈
 
