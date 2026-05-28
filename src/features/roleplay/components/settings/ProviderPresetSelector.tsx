@@ -23,10 +23,10 @@ import type {
 } from "../../storage/apiProviderConfigStorage";
 import {
   deleteConfig,
-  findConfigByCredentialId,
   getEnabledConfig,
   listConfigs,
   markUsed,
+  removeHostedConfigMetadata,
   saveConfig,
   setEnabled,
   setTestResult,
@@ -61,7 +61,6 @@ import {
   saveHostedCredential,
   saveHostedCredentialSelection,
   selectionFromCredential,
-  setDefaultHostedCredential,
 } from "../../services/hostedCredentialsService";
 import type { ProviderCredentialRow } from "../../types/database";
 
@@ -155,6 +154,18 @@ function toHostedSyncInput(credential: ProviderCredentialRow): HostedConfigSyncI
     baseURL: credential.base_url || getBaseUrl(credential.provider_type),
     isDefault: credential.is_default,
   };
+}
+
+function dedupeHostedCredentials(credentials: ProviderCredentialRow[]): ProviderCredentialRow[] {
+  const byId = new Map<string, ProviderCredentialRow>();
+  [...credentials]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .forEach((credential) => {
+      if (!byId.has(credential.id)) {
+        byId.set(credential.id, credential);
+      }
+    });
+  return Array.from(byId.values());
 }
 
 export function ProviderPresetSelector() {
@@ -251,9 +262,17 @@ export function ProviderPresetSelector() {
     try {
       const credentials = await listHostedCredentials();
       setHostedCredentials(credentials);
-      credentials
-        .filter((credential) => credential.status !== "deleted" && !credential.deleted_at)
-        .forEach((credential) => syncHostedConfig(toHostedSyncInput(credential)));
+      const activeCredentials = credentials.filter((credential) => credential.status !== "deleted" && !credential.deleted_at);
+      const activeCredentialIds = new Set(activeCredentials.map((credential) => credential.id));
+      listConfigs()
+        .filter(
+          (config) =>
+            config.storageMode === "hosted_encrypted" &&
+            config.credentialId &&
+            !activeCredentialIds.has(config.credentialId),
+        )
+        .forEach((config) => removeHostedConfigMetadata(config.credentialId as string));
+      activeCredentials.forEach((credential) => syncHostedConfig(toHostedSyncInput(credential)));
       refreshConfigs();
 
       const preferred =
@@ -652,6 +671,32 @@ export function ProviderPresetSelector() {
     setMessage("配置已删除。");
   }
 
+  async function handleTestHostedCredential(credential: ProviderCredentialRow) {
+    const mapped = hostedConfigByCredentialId.get(credential.id) ?? syncHostedConfig(toHostedSyncInput(credential));
+    refreshConfigs();
+    await handleTestConfig(mapped.id);
+  }
+
+  async function handleEnableHostedCredential(credential: ProviderCredentialRow) {
+    const mapped = hostedConfigByCredentialId.get(credential.id) ?? syncHostedConfig(toHostedSyncInput(credential));
+    await handleEnable(mapped.id);
+  }
+
+  async function handleDeleteHostedCredential(credential: ProviderCredentialRow) {
+    if (!window.confirm("确定删除这份托管加密凭据吗？")) {
+      return;
+    }
+
+    await deleteHostedCredential(credential.id);
+    removeHostedConfigMetadata(credential.id);
+    if (selectedHostedId === credential.id) {
+      setSelectedHostedId(null);
+    }
+    await refreshHostedCredentials();
+    refreshConfigs();
+    setMessage("托管凭据已删除。");
+  }
+
   function handleClearLocal() {
     clearApiKey(provider, storageMode);
     setApiKey("");
@@ -665,7 +710,38 @@ export function ProviderPresetSelector() {
       : null;
   const usable = isPresetUsable(provider);
   const notUsable = !usable && provider !== "mock";
-  const visibleHostedCredentials = hostedCredentials.filter((item) => item.status !== "deleted" && !item.deleted_at);
+  const visibleHostedCredentials = useMemo(
+    () =>
+      dedupeHostedCredentials(
+        hostedCredentials.filter((item) => item.status !== "deleted" && !item.deleted_at),
+      ),
+    [hostedCredentials],
+  );
+  const deviceConfigs = useMemo(
+    () => configs.filter((config) => config.storageMode !== "hosted_encrypted"),
+    [configs],
+  );
+  const sessionConfigs = useMemo(
+    () => deviceConfigs.filter((config) => config.storageMode === "session_only"),
+    [deviceConfigs],
+  );
+  const localDeviceConfigs = useMemo(
+    () => deviceConfigs.filter((config) => config.storageMode === "local_device"),
+    [deviceConfigs],
+  );
+  const hostedConfigByCredentialId = useMemo(() => {
+    const map = new Map<string, ApiConfigEntry>();
+    configs
+      .filter((config) => config.storageMode === "hosted_encrypted" && config.credentialId)
+      .forEach((config) => {
+        if (!config.credentialId || map.has(config.credentialId)) return;
+        map.set(config.credentialId, config);
+      });
+    return map;
+  }, [configs]);
+  const showDeviceConfigDisclosure = hostedAvailable && deviceConfigs.length > 0;
+  const currentHostedCredentialId =
+    enabledConfig?.storageMode === "hosted_encrypted" ? enabledConfig.credentialId ?? selectedHostedId : selectedHostedId;
 
   return (
     <div className="space-y-5">
@@ -698,38 +774,176 @@ export function ProviderPresetSelector() {
         </div>
       )}
 
-      {configs.length > 0 ? (
+      {hostedAvailable ? (
         <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-500">已保存的配置</h4>
-          {configs.map((config) => (
-            <ProviderConfigCard
-              key={config.id}
-              config={config}
-              testing={testingId === config.id}
-              enabling={enablingId === config.id}
-              onEdit={(id) => {
-                const target = configs.find((item) => item.id === id);
-                if (!target) return;
-                openEditor({
-                  id: target.id,
-                  provider: target.provider,
-                  storageMode: target.storageMode,
-                  model: target.model,
-                  baseURL: target.baseURL,
-                  label: target.label,
-                  credentialId: target.credentialId,
-                  isDefault:
-                    target.enabled ||
-                    !!hostedCredentials.find((item) => item.id === target.credentialId && item.is_default),
-                });
-              }}
-              onTest={() => void handleTestConfig(config.id)}
-              onEnable={(id) => void handleEnable(id)}
-              onDelete={(id) => void handleDelete(id)}
-            />
-          ))}
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-ink-700">当前账号 API 配置</h4>
+              <p className="mt-1 text-xs text-ink-400">
+                这些配置保存为托管加密凭据，登录同账号后可跨设备使用，不显示明文 API Key。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshHostedCredentials()}
+              disabled={hostedLoading}
+              className="neo-button flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs text-ink-600 disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              刷新
+            </button>
+          </div>
+
+          {hostedLoading ? (
+            <div className="neo-panel-soft rounded-[24px] px-4 py-3 text-sm text-ink-500">
+              正在加载当前账号 API 配置...
+            </div>
+          ) : hostedError ? (
+            <div className="rounded-[20px] border border-rose-100/80 bg-rose-50/60 px-3 py-2 text-xs text-rose-600">
+              {hostedError}
+            </div>
+          ) : visibleHostedCredentials.length === 0 ? (
+            <div className="neo-panel-soft rounded-[24px] px-4 py-4 text-sm text-ink-500">
+              当前账号还没有云端 API 配置。
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {visibleHostedCredentials.map((cred) => {
+                const mapped = hostedConfigByCredentialId.get(cred.id);
+                const isEnabled = currentHostedCredentialId === cred.id || !!mapped?.enabled;
+                const providerName = cred.provider_type === "deepseek" ? "DeepSeek" : getPresetName(cred.provider_type);
+                const testStatus = mapped?.testStatus ?? "untested";
+                const testTime = mapped?.lastTestedAt ? new Date(mapped.lastTestedAt).toLocaleString() : "未测试";
+                const usedTime = mapped?.lastUsedAt || cred.last_used_at
+                  ? new Date((mapped?.lastUsedAt || cred.last_used_at) as string).toLocaleString()
+                  : "暂无记录";
+
+                return (
+                  <div
+                    key={cred.id}
+                    className={`${isEnabled ? "neo-button-pressed ring-1 ring-brand-200/60" : "neo-panel-soft"} rounded-[24px] px-4 py-4`}
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h5 className="text-sm font-semibold text-ink-700">{cred.label || "未命名托管凭据"}</h5>
+                          <ProviderStatusDot status={testStatus} showLabel />
+                          {cred.is_default ? (
+                            <span className="neo-pill bg-emerald-light px-2 py-0.5 text-[10px] text-emerald-700">默认</span>
+                          ) : null}
+                          {isEnabled ? (
+                            <span className="neo-pill bg-brand-100/70 px-2 py-0.5 text-[10px] text-brand-700">已启用</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-ink-400">
+                          {providerName} / {cred.default_model || "未设置模型"}
+                        </p>
+                        <p className="mt-1 text-[11px] text-ink-300">
+                          最近测试：{testTime} · 最近使用：{usedTime}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openEditor({
+                              id: cred.id,
+                              provider: cred.provider_type,
+                              storageMode: "hosted_encrypted",
+                              model: cred.default_model || getDefaultModel(cred.provider_type),
+                              baseURL: cred.base_url || getBaseUrl(cred.provider_type),
+                              label: cred.label || "",
+                              credentialId: cred.id,
+                              isDefault: cred.is_default,
+                            })
+                          }
+                          className="neo-button rounded-[18px] px-3.5 py-2 text-xs text-ink-600"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          编辑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleTestHostedCredential(cred)}
+                          disabled={testingId === mapped?.id}
+                          className="neo-button rounded-[18px] px-3.5 py-2 text-xs text-ink-600 disabled:opacity-50"
+                        >
+                          <Zap className="h-3.5 w-3.5" />
+                          {testingId === mapped?.id ? "测试中..." : "测试连接"}
+                        </button>
+                        {isEnabled ? (
+                          <div className="neo-pill flex items-center justify-center rounded-[18px] px-3.5 py-2 text-xs text-brand-700">
+                            已启用
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleEnableHostedCredential(cred)}
+                            disabled={enablingId === mapped?.id}
+                            className="neo-button-primary rounded-[18px] px-3.5 py-2 text-xs disabled:opacity-50"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            设为启用
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteHostedCredential(cred)}
+                          className="neo-button rounded-[18px] px-3.5 py-2 text-xs text-rose-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      ) : null}
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <h4 className="text-sm font-semibold text-ink-700">本设备 API 配置</h4>
+            <p className="mt-1 text-xs text-ink-400">
+              当前未登录，只能使用本设备配置。登录后可保存托管加密凭据，实现跨设备同步。
+            </p>
+          </div>
+          {deviceConfigs.length === 0 ? (
+            <div className="neo-panel-soft rounded-[24px] px-4 py-4 text-sm text-ink-500">
+              当前设备还没有已保存的本地 API 配置。
+            </div>
+          ) : (
+            deviceConfigs.map((config) => (
+              <ProviderConfigCard
+                key={config.id}
+                config={config}
+                testing={testingId === config.id}
+                enabling={enablingId === config.id}
+                onEdit={(id) => {
+                  const target = deviceConfigs.find((item) => item.id === id);
+                  if (!target) return;
+                  openEditor({
+                    id: target.id,
+                    provider: target.provider,
+                    storageMode: target.storageMode,
+                    model: target.model,
+                    baseURL: target.baseURL,
+                    label: target.label,
+                    credentialId: target.credentialId,
+                    isDefault: target.enabled,
+                  });
+                }}
+                onTest={() => void handleTestConfig(config.id)}
+                onEnable={(id) => void handleEnable(id)}
+                onDelete={(id) => void handleDelete(id)}
+              />
+            ))
+          )}
+        </div>
+      )}
 
       <details className="group" open={configs.length === 0}>
         <summary className="cursor-pointer list-none">
@@ -972,126 +1186,69 @@ export function ProviderPresetSelector() {
         </div>
       </details>
 
-      {(hostedAvailable || visibleHostedCredentials.length > 0) && (
-        <div className="space-y-3 border-t border-white/55 pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h4 className="text-sm font-semibold text-ink-700">已保存的托管凭据</h4>
-              <p className="mt-1 text-xs text-ink-400">local_device 只保存在当前设备；hosted_encrypted 登录后会跨设备可见。</p>
+      {showDeviceConfigDisclosure ? (
+        <details className="group border-t border-white/55 pt-4">
+          <summary className="cursor-pointer list-none">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink-700">
+              <ChevronDown className="h-4 w-4 transition-transform duration-[220ms] group-open:rotate-180" />
+              本设备配置
             </div>
-            <button
-              onClick={() => void refreshHostedCredentials()}
-              disabled={hostedLoading}
-              className="neo-button flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs text-ink-600 disabled:opacity-50"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              刷新
-            </button>
+            <p className="mt-1 pl-6 text-xs text-ink-400">
+              这些配置只保存在当前设备浏览器，不会同步到其他设备。
+            </p>
+          </summary>
+
+          <div className="mt-3 space-y-3 pl-0.5">
+            {localDeviceConfigs.length > 0 ? (
+              <div className="space-y-3">
+                {localDeviceConfigs.map((config) => (
+                  <ProviderConfigCard
+                    key={config.id}
+                    config={config}
+                    testing={testingId === config.id}
+                    enabling={enablingId === config.id}
+                    onEdit={(id) => {
+                      const target = localDeviceConfigs.find((item) => item.id === id);
+                      if (!target) return;
+                      openEditor({
+                        id: target.id,
+                        provider: target.provider,
+                        storageMode: target.storageMode,
+                        model: target.model,
+                        baseURL: target.baseURL,
+                        label: target.label,
+                        credentialId: target.credentialId,
+                        isDefault: target.enabled,
+                      });
+                    }}
+                    onTest={() => void handleTestConfig(config.id)}
+                    onEnable={(id) => void handleEnable(id)}
+                    onDelete={(id) => void handleDelete(id)}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {sessionConfigs.length > 0 ? (
+              <div className="neo-panel-soft rounded-[24px] px-4 py-4 text-sm text-ink-600">
+                当前还有 {sessionConfigs.length} 个仅本次会话有效的临时配置。关闭页面后，这些配置可能需要重新填写。
+              </div>
+            ) : null}
+
+            {!hostedAvailable ? (
+              <div className="neo-panel-soft rounded-[24px] px-4 py-4 text-sm text-ink-500">
+                登录后可使用托管加密凭据，当前账号的云端 API 配置会显示在上方主列表中。
+              </div>
+            ) : null}
+
+            {deviceConfigs.length === 0 ? (
+              <div className="neo-panel-soft rounded-[24px] px-4 py-4 text-sm text-ink-500">
+                当前设备还没有单独保存的本地 API 配置。
+              </div>
+            ) : null}
           </div>
-
-          {hostedError ? (
-            <div className="rounded-[20px] border border-rose-100/80 bg-rose-50/60 px-3 py-2 text-xs text-rose-600">
-              {hostedError}
-            </div>
-          ) : null}
-
-          {!hostedAvailable ? (
-            <p className="text-sm text-ink-500">托管加密需要先登录；未登录时不会显示云端凭据列表。</p>
-          ) : visibleHostedCredentials.length === 0 ? (
-            <p className="text-sm text-ink-400">还没有托管凭据。保存为 hosted_encrypted 后，登录同账号的其他设备会自动看到。</p>
-          ) : (
-            <div className="space-y-3">
-              {visibleHostedCredentials.map((cred) => (
-                <div
-                  key={cred.id}
-                  className={`${cred.id === selectedHostedId ? "neo-button-pressed ring-1 ring-brand-200/60" : "neo-panel-soft"} rounded-[24px] px-4 py-3`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h5 className="text-sm font-semibold text-ink-700">{cred.label || "未命名托管凭据"}</h5>
-                        {cred.is_default ? (
-                          <span className="neo-pill bg-emerald-light px-2 py-0.5 text-[10px] text-emerald-700">默认</span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-xs text-ink-400">
-                        {cred.provider_type === "deepseek" ? "DeepSeek" : cred.provider_type} / {cred.default_model || "未设置模型"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() =>
-                          openEditor({
-                            id: cred.id,
-                            provider: cred.provider_type,
-                            storageMode: "hosted_encrypted",
-                            model: cred.default_model || getDefaultModel(cred.provider_type),
-                            baseURL: cred.base_url || getBaseUrl(cred.provider_type),
-                            label: cred.label || "",
-                            credentialId: cred.id,
-                            isDefault: cred.is_default,
-                          })
-                        }
-                        className="neo-button rounded-full px-3.5 py-2 text-xs text-ink-600"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        编辑
-                      </button>
-                      <button
-                        onClick={() => {
-                          const synced = syncHostedConfig(toHostedSyncInput(cred));
-                          setEnabled(synced.id);
-                          setSelectedHostedId(cred.id);
-                          saveHostedCredentialSelection(selectionFromCredential(cred));
-                          refreshConfigs();
-                          setMessage("已切换当前托管凭据。");
-                        }}
-                        className="neo-button rounded-full px-3.5 py-2 text-xs text-ink-600"
-                      >
-                        设为当前使用
-                      </button>
-                      {!cred.is_default ? (
-                        <button
-                          onClick={() =>
-                            void setDefaultHostedCredential(cred.id).then(async (updated) => {
-                              syncHostedConfig(toHostedSyncInput(updated));
-                              setSelectedHostedId(updated.id);
-                              saveHostedCredentialSelection(selectionFromCredential(updated));
-                              refreshConfigs();
-                              await refreshHostedCredentials();
-                              setMessage("已设为默认托管凭据。");
-                            })
-                          }
-                          className="neo-button rounded-full px-3.5 py-2 text-xs text-brand-600"
-                        >
-                          设为默认
-                        </button>
-                      ) : null}
-                      <button
-                        onClick={() =>
-                          void deleteHostedCredential(cred.id).then(async () => {
-                            const mapped = findConfigByCredentialId(cred.id);
-                            if (mapped) {
-                              deleteConfig(mapped.id);
-                            }
-                            await refreshHostedCredentials();
-                            refreshConfigs();
-                            setMessage("托管凭据已删除。");
-                          })
-                        }
-                        className="neo-button rounded-full px-3.5 py-2 text-xs text-rose-600"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        </details>
+      ) : null}
 
       <AppModal
         open={!!editingTarget}

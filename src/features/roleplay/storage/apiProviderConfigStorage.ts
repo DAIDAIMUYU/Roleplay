@@ -72,10 +72,39 @@ function saveConfigs(configs: ApiConfigEntry[]): void {
   }
 }
 
-export function listConfigs(): ApiConfigEntry[] {
-  return loadConfigs().sort(
+function sortConfigs(configs: ApiConfigEntry[]): ApiConfigEntry[] {
+  return configs.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
+}
+
+function normalizeHostedConfigs(configs: ApiConfigEntry[]): ApiConfigEntry[] {
+  const directConfigs = configs.filter(
+    (config) => config.storageMode !== "hosted_encrypted" || !config.credentialId,
+  );
+  const hostedByCredential = new Map<string, ApiConfigEntry[]>();
+
+  configs
+    .filter((config) => config.storageMode === "hosted_encrypted" && config.credentialId)
+    .forEach((config) => {
+      const credentialId = config.credentialId as string;
+      const list = hostedByCredential.get(credentialId) ?? [];
+      list.push(config);
+      hostedByCredential.set(credentialId, list);
+    });
+
+  const normalizedHosted = Array.from(hostedByCredential.values()).map((entries) => {
+    const sorted = sortConfigs([...entries]);
+    const latest = sorted[0];
+    const enabled = entries.some((entry) => entry.enabled);
+    return enabled ? { ...latest, enabled } : latest;
+  });
+
+  return sortConfigs([...directConfigs, ...normalizedHosted]);
+}
+
+export function listConfigs(): ApiConfigEntry[] {
+  return normalizeHostedConfigs(loadConfigs());
 }
 
 export function getConfig(id: string): ApiConfigEntry | null {
@@ -116,7 +145,7 @@ export function saveConfig(input: ApiConfigSaveInput): ApiConfigEntry {
   };
 
   configs.push(entry);
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
 
   if (entry.enabled) {
     localStorage.setItem(ENABLED_CONFIG_KEY, entry.id);
@@ -134,16 +163,38 @@ export function updateConfig(
   if (idx === -1) return null;
 
   configs[idx] = { ...configs[idx], ...input, updatedAt: new Date().toISOString() };
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
   return configs[idx];
 }
 
 export function findConfigByCredentialId(credentialId: string): ApiConfigEntry | null {
-  return loadConfigs().find((config) => config.storageMode === "hosted_encrypted" && config.credentialId === credentialId) ?? null;
+  return listConfigs().find((config) => config.storageMode === "hosted_encrypted" && config.credentialId === credentialId) ?? null;
+}
+
+export function findConfigsByCredentialId(credentialId: string): ApiConfigEntry[] {
+  return listConfigs().filter(
+    (config) => config.storageMode === "hosted_encrypted" && config.credentialId === credentialId,
+  );
+}
+
+export function removeHostedConfigMetadata(credentialId: string): void {
+  const nextConfigs = loadConfigs().filter(
+    (config) => !(config.storageMode === "hosted_encrypted" && config.credentialId === credentialId),
+  );
+  saveConfigs(normalizeHostedConfigs(nextConfigs));
+
+  const enabledId = localStorage.getItem(ENABLED_CONFIG_KEY);
+  if (enabledId && !nextConfigs.some((config) => config.id === enabledId)) {
+    localStorage.removeItem(ENABLED_CONFIG_KEY);
+    const first = listConfigs()[0];
+    if (first) {
+      setEnabled(first.id);
+    }
+  }
 }
 
 export function syncHostedConfig(input: HostedConfigSyncInput): ApiConfigEntry {
-  const configs = loadConfigs();
+  const configs = normalizeHostedConfigs(loadConfigs());
   const now = new Date().toISOString();
   const hasEnabledConfig = configs.some((config) => config.enabled);
   const existingIndex = configs.findIndex(
@@ -168,7 +219,7 @@ export function syncHostedConfig(input: HostedConfigSyncInput): ApiConfigEntry {
       localStorage.setItem(ENABLED_CONFIG_KEY, updated.id);
     }
 
-    saveConfigs(configs);
+    saveConfigs(normalizeHostedConfigs(configs));
     return updated;
   }
 
@@ -195,7 +246,7 @@ export function syncHostedConfig(input: HostedConfigSyncInput): ApiConfigEntry {
   }
 
   configs.push(created);
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
   return created;
 }
 
@@ -216,7 +267,7 @@ export function setTestResult(
     lastTestError: error ?? null,
     updatedAt: new Date().toISOString(),
   };
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
 }
 
 export function setEnabled(id: string): ApiConfigEntry | null {
@@ -246,12 +297,12 @@ export function markUsed(id: string): void {
   const idx = configs.findIndex((c) => c.id === id);
   if (idx === -1) return;
   configs[idx] = { ...configs[idx], lastUsedAt: new Date().toISOString() };
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
 }
 
 export function deleteConfig(id: string): void {
   const configs = loadConfigs().filter((c) => c.id !== id);
-  saveConfigs(configs);
+  saveConfigs(normalizeHostedConfigs(configs));
 
   const enabledId = localStorage.getItem(ENABLED_CONFIG_KEY);
   if (enabledId === id) {
